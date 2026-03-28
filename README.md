@@ -95,11 +95,11 @@ Based on current ARM QNAP benchmarks:
 
 ## Project docs
 
-- [使用說明.md](./使用說明.md)
-- [技術方案.md](./技術方案.md)
-- [性能基準報告-2026-03-27.md](./性能基準報告-2026-03-27.md)
+- [Usage guide](./docs/usage.md)
+- [Design](./docs/design.md)
+- [Benchmarks](./docs/benchmarks.md)
+- [QNAP notes](./docs/qnap-notes.md)
 
 ## License
 
 MIT
-

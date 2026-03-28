@@ -1,4 +1,4 @@
-# archive 使用說明
+# archive Usage Guide
 
 ## 1. 目的
 
@@ -249,6 +249,6 @@ sudo -u admin \
 
 ## 11. 文檔對照
 
-- 架構與設計原則：`技術方案.md`
-- 性能結論與最佳參數：`性能基準報告-2026-03-27.md`
-- 實際歸檔樣本測試：`歸檔測試報告-2026-03-27.md`
+- 架構與設計原則：`docs/design.md`
+- 性能結論與最佳參數：`docs/benchmarks.md`
+- 實際歸檔樣本測試：`docs/archive-run-report.md`
