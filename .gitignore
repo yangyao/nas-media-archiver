@@ -1,0 +1,8 @@
+/.secrets/
+/archive
+/dist/
+/.DS_Store
+/*.log
+/*.csv
+/*.json
+/*.jsonl
