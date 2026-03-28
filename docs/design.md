@@ -1,12 +1,12 @@
-# NAS 文件整理系統 - 技術方案
+# Design
 
 > 本文檔是本項目的唯一技術方案來源。涉及架構、接口、狀態機、性能策略時，以本文檔為準。
 
-相關文檔：
+Related docs:
 
-- 使用方式與部署：`docs/usage.md`
-- 性能測試結論：`docs/benchmarks.md`
-- 實際歸檔樣本報告：`docs/archive-run-report.md`
+- Usage and deployment: `docs/usage.md`
+- Benchmark notes: `docs/benchmarks.md`
+- QNAP-specific notes: `docs/qnap-notes.md`
 
 ## 1. 項目概述
 
@@ -273,7 +273,7 @@ discovered
 {
   "jobId": "job-001",
   "fileId": "file-000001",
-  "sourcePath": "/share/ssd/upload/IMG_001.jpg",
+  "sourcePath": "/input/IMG_001.jpg",
   "size": 1234567,
   "mtime": "2024-01-15T14:30:52Z",
   "status": "metadata_done",
@@ -282,10 +282,10 @@ discovered
   "metadataSource": "native-exif",
   "md5": null,
   "md5ComputedAt": null,
-  "targetPath": "/share/archive/photos/2024/01/20240115_143052_1234567.jpg",
+  "targetPath": "/archive/photos/2024/01/20240115_143052_1234567.jpg",
   "archiveType": "photos",
-  "createdAt": "2026-03-27T10:00:00+08:00",
-  "updatedAt": "2026-03-27T10:00:03+08:00"
+  "createdAt": "<timestamp>",
+  "updatedAt": "<timestamp>"
 }
 ```
 
@@ -295,7 +295,7 @@ discovered
 {
   "jobId": "job-001",
   "fileId": "file-000001",
-  "path": "/share/ssd/upload/IMG_001.jpg",
+  "path": "/input/IMG_001.jpg",
   "stage": "metadata_done",
   "status": "ok",
   "datetime": "2024-01-15T14:30:52Z",
@@ -304,7 +304,7 @@ discovered
   "errorMessage": "",
   "queuePosition": 0,
   "eventSeq": 1024,
-  "emittedAt": "2026-03-27T10:00:03+08:00"
+  "emittedAt": "<timestamp>"
 }
 ```
 
@@ -426,7 +426,7 @@ ARM NAS 的推薦初始值：
 
 ```bash
 archive scan \
-  --path /share/ssd/upload \
+  --path /input \
   --ext .jpg,.jpeg,.heic,.png,.mp4,.mov,.3gp
 ```
 
@@ -434,13 +434,13 @@ archive scan \
 Job: job-001
 Files: 123456
 Status: created
-ScannedAt: 2026-03-27T10:00:00+08:00
+ScannedAt: <timestamp>
 ```
 
 ### 6.4 啟動命令
 
 ```bash
-archive run --job job-001 --archive-base /share/archive
+archive run --job job-001 --archive-base /archive
 ```
 
 ```text
@@ -464,8 +464,8 @@ Queued: 800
 MetadataRunning: 2
 MD5Running: 1
 WriterQueueLength: 42
-StartedAt: 2026-03-27T10:00:10+08:00
-UpdatedAt: 2026-03-27T10:03:45+08:00
+StartedAt: <timestamp>
+UpdatedAt: <timestamp>
 ```
 
 ### 6.6 進度觀察命令

@@ -1,111 +1,99 @@
-# 性能基準報告 - 2026-03-27
+# Benchmarks
 
-## 測試目標
+This document summarizes representative dry-run benchmark results for
+`nas-media-archiver` on a 4-core ARM QNAP NAS.
 
-評估 `archive` 在 QNAP NAS 上對目錄 `/share/ssd/upload/iphonexs-2026-02` 的 dry run 性能，並比較不同優化階段與不同 worker 數的效果。
+The purpose is to show relative performance changes across optimization stages,
+not to preserve one user's exact runtime history.
 
-## 測試環境
+## Test setup
 
-- NAS CPU 可見核心數：`4`
-- 測試目錄：`/share/ssd/upload/iphonexs-2026-02`
-- 原始文件數：`723`
-- 可處理文件數：`721`
-- 副檔名分佈：
-  - `.jpg`: `566`
-  - `.mov`: `79`
-  - `.png`: `74`
-  - `.mp4`: `2`
+- Host class: 4-core ARM QNAP NAS
+- Run mode: `--dry-run`
+- Dataset shape:
+  - about 700 media files
+  - mostly `.jpg`
+  - a smaller number of `.mov` and `.png`
+  - a very small number of `.mp4`
 
-## 優化階段
+## Optimization stages
 
-### 階段 A
+### Stage A
 
-- 單線程
-- 每文件整份重寫 `job.json`
-- 每條事件單獨打開/關閉 `events.jsonl`
+- single-threaded
+- rewrites `job.json` after every file
+- opens and closes `events.jsonl` for every event
 
-### 階段 B
+### Stage B
 
-- 單線程
-- `job.json` 改成批量寫
-- `events.jsonl` 改成運行期間保持文件句柄打開
+- single-threaded
+- writes `job.json` in batches
+- keeps `events.jsonl` open during the run
 
-### 階段 C
+### Stage C
 
-- 在階段 B 基礎上加入並發 worker
-- `metadata/plan` 並發
-- 真實寫入階段仍保持單 writer
+- keeps Stage B persistence changes
+- adds concurrent metadata and planning workers
+- still uses a single writer for final archive writes
 
-## dry run 結果
+### Stage D
 
-### 階段 B 基線
+- splits image work and video fallback work into separate queues
+- keeps single-writer semantics
 
-- Job: `job-20260327-163345`
-- workers: 默認單線程
-- 總耗時：`40 秒`
-- 吞吐：`18.03 文件/秒`
-- 平均：`0.055 秒/文件`
+## Dry-run results
 
-### 階段 C 對比
+### Stage B baseline
 
-| workers | job | 耗時 | 吞吐 |
-|------|------|------|------|
-| 1 | `job-20260327-163845` | `40 秒` | `18.03 文件/秒` |
-| 2 | `job-20260327-163925` | `25 秒` | `28.84 文件/秒` |
-| 4 | `job-20260327-163950` | `23 秒` | `31.35 文件/秒` |
-| 8 | `job-20260327-164013` | `18 秒` | `40.06 文件/秒` |
-| 12 | `job-20260327-164050` | `20 秒` | `36.05 文件/秒` |
-| 16 | `job-20260327-164110` | `19 秒` | `37.95 文件/秒` |
+- elapsed: `40s`
+- throughput: about `18 files/s`
+- average: about `0.055s/file`
 
-## 結論
+### Stage C worker comparison
 
-1. 只做狀態持久化優化後，dry run 基線是 `40 秒`。
-2. 加入並發 worker 後，最佳點出現在 `workers=8`，耗時降到 `18 秒`。
-3. 對比單線程 `40 秒`，`workers=8` 的提升約為 `2.22x`。
-4. 在這台 4 核 NAS 上，並發超過 `8` 之後沒有繼續提升，開始回退。
-5. 當前 dry-run 的合理最佳配置可先定為：
+| workers | elapsed | throughput |
+|------|------|------|
+| `1` | `40s` | `18 files/s` |
+| `2` | `25s` | `29 files/s` |
+| `4` | `23s` | `31 files/s` |
+| `8` | `18s` | `40 files/s` |
+| `12` | `20s` | `36 files/s` |
+| `16` | `19s` | `38 files/s` |
+
+### Stage D split-queue comparison
+
+| fast/video | elapsed | throughput |
+|------|------|------|
+| `7/1` | `26s` | `28 files/s` |
+| `6/2` | `23s` | `31 files/s` |
+| `8/1` | `26s` | `28 files/s` |
+
+## Conclusions
+
+1. Batching snapshot writes and keeping the event log open removes obvious
+   persistence overhead.
+2. The best dry-run setting observed on this machine is still:
    - `--workers 8`
    - `--snapshot-every 100`
+3. On this workload, split video queues did not beat the simpler `--workers 8`
+   configuration.
+4. Once worker counts go past `8`, returns flatten or regress because scheduler,
+   disk, and external-tool contention start to dominate.
 
-## 階段 D: 視頻慢隊列拆分
+## Practical guidance
 
-目標：
+For a similar ARM NAS setup, start with:
 
-- 圖片/PNG 走快隊列
-- 視頻走慢隊列
-- 嘗試避免視頻探測拖累整體調度
+```bash
+./archive run \
+  --job <job-id> \
+  --archive-base /path/to/archive \
+  --state-dir /path/to/archive-state \
+  --dry-run \
+  --workers 8 \
+  --snapshot-every 100
+```
 
-### 測試結果
+Then tune only if your workload differs materially, especially if your video
+ratio is much higher than your image ratio.
 
-| fast/video | job | 耗時 | 吞吐 |
-|------|------|------|------|
-| `7/1` | `job-20260327-164715` | `26 秒` | `27.73 文件/秒` |
-| `6/2` | `job-20260327-164743` | `23 秒` | `31.35 文件/秒` |
-| `8/1` | `job-20260327-164806` | `26 秒` | `27.73 文件/秒` |
-
-### 階段 D 結論
-
-1. 視頻慢隊列拆分沒有超過前一版通用 `workers=8` 的 `18 秒` 最佳結果。
-2. 在這批 `721` 文件中，視頻只有 `81` 個，拆分慢隊列帶來的調度收益不夠大。
-3. 當前 dry-run 的實際最佳值仍然是：
-   - `--workers 8`
-   - 耗時 `18 秒`
-
-## 解讀
-
-1. 目前 dry-run 的瓶頸已經不再是狀態落盤，而主要轉向：
-   - 視頻 metadata 探測
-   - 調度與事件輸出
-   - 單文件處理中的固定成本
-2. `workers=8` 優於 `workers=4`，說明這個 workload 不是純 CPU 綁死，還包含等待 I/O 或外部進程的時間。
-3. `workers=12/16` 回退，說明已經開始出現：
-   - 上下文切換成本
-   - 磁盤與外部工具競爭
-   - ARM NAS 調度開銷放大
-
-## 下一步最值得做的優化
-
-1. 進一步減少外部 metadata 進程調用次數
-2. 降低事件粒度，減少 dry-run 中不必要的事件量
-3. 為視頻探測做獨立限流，而不是與圖片共用同一 worker 池
-4. 為真實歸檔增加 metadata 並發 + 單 writer 的完整 pipeline 統計

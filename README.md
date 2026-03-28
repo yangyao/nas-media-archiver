@@ -82,7 +82,7 @@ Example:
 ```bash
 sudo -u admin ./archive run \
   --job <job-id> \
-  --archive-base /share/archive \
+  --archive-base /path/to/archive \
   --state-dir /path/to/archive-state
 ```
 
