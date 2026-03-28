@@ -1,6 +1,7 @@
 # Design
 
-> 本文檔是本項目的唯一技術方案來源。涉及架構、接口、狀態機、性能策略時，以本文檔為準。
+This document is the source of truth for the project architecture and runtime
+behavior.
 
 Related docs:
 
@@ -8,224 +9,131 @@ Related docs:
 - Benchmark notes: `docs/benchmarks.md`
 - QNAP-specific notes: `docs/qnap-notes.md`
 
-## 1. 項目概述
+## Goals
 
-### 1.1 目標
+The project is a single-binary Go CLI that archives photos and videos from an
+input directory into a date-based archive tree.
 
-構建一個運行在 QNAP NAS 上的照片/視頻歸檔系統，包含：
+It is optimized for NAS-first workflows:
 
-- `Go CLI 程序`：掃描文件、提取元數據、去重、移動、查看進度、重試失敗
+- no web frontend
+- no background server
+- no database required for the initial version
+- all file operations happen locally on the machine that runs the binary
 
-系統不再依賴桌面客戶端、Web 前端或常駐 server。程序直接在 NAS 上執行，所有文件操作都在本地完成。
+## Core principles
 
-### 1.2 核心設計原則
+1. Correctness before speed.
+2. File-level state tracking.
+3. Keep expensive work local.
+4. Remove fixed per-file overhead before adding more concurrency.
+5. Read aggressively, write conservatively.
 
-1. 正確性優先於性能
-   - 時間信息錯誤會直接破壞歸檔價值
-   - 寧可慢一些，也不能默默歸錯
+## Archive model
 
-2. 狀態最小單位是文件
-   - 任務提交可以批量
-   - 狀態回報必須逐文件
-   - CLI 必須能精確看到每個文件在哪個階段
+Supported archive groups:
 
-3. 所有重活都在 NAS 端
-   - 掃描、metadata、去重、移動都由 Go 程序本地執行
-   - 不引入網絡通信和遠程控制層
+- `photos`
+- `videos`
+- `pngs`
 
-4. 先消除固定成本，再談並發
-   - 減少每文件固定調度開銷
-   - 減少每文件外部進程啟動
-   - MD5 只在必要時才計算
-
-5. 保守寫入，激進讀取
-   - 掃描和 metadata 可並發
-   - 最終寫入保持單 writer
-   - 原子移動和可恢復優先
-
-### 1.3 核心需求
-
-| 需求 | 描述 |
-|------|------|
-| 高性能掃描 | 10萬+ 文件快速掃描 |
-| 準確歸檔 | 按時間歸檔，命名為 `YYYYMMDD_HHMMSS_大小.ext` |
-| 重複處理 | 只在衝突時做 MD5，比較後保留所有版本 |
-| 可操作性 | CLI 可啟動任務、查看進度、查詢錯誤 |
-| 精確狀態 | CLI 能逐文件查看狀態 |
-| 安全寫入 | 單 writer，原子移動，支持恢復 |
-| ARM 友好 | 避免每文件反覆啟動 `exiftool` / `ffmpeg` |
-
-### 1.4 技術棧
-
-- 客戶端：`Go CLI`
-- 執行引擎：`Go`
-- NAS 本地元數據策略：`Go 原生解析優先，外部工具 fallback`
-- 持久化：`本地 snapshot / job log`，不引入資料庫作為首版前提
-
----
-
-## 2. 時間信息提取策略
-
-### 2.1 設計理念
-
-時間信息提取要分成兩個維度思考：
-
-- `可信度`
-- `執行成本`
-
-原則不是「無論如何先跑最重的工具」，而是：
-
-1. 先嘗試低成本且命中率高的方式
-2. 命中後記錄來源與可信度
-3. 只有必要時才走昂貴 fallback
-4. 最後才用 mtime
-
-### 2.2 時間來源優先級
-
-按可信度排序：
-
-1. 照片 EXIF `DateTimeOriginal`
-2. 照片 EXIF `CreateDate`
-3. 視頻 metadata `creation_time`
-4. 文件名解析
-5. 文件 `mtime`
-
-按執行成本排序：
-
-1. 文件名解析
-2. Go 原生 metadata 解析
-3. 外部工具 fallback
-4. mtime
-
-因此實際執行策略為：
-
-1. 先文件名快速判斷
-2. 再用 Go 原生解析嘗試高可信時間
-3. 原生失敗時才用外部工具
-4. 全部失敗再用 mtime
-
-### 2.3 各類型文件處理流程
-
-#### 照片 (JPG/JPEG)
+Target path format:
 
 ```text
-文件名解析
-  -> 命中高可信格式則記錄候選時間
-  -> Go 原生 EXIF 讀取 DateTimeOriginal / CreateDate
-  -> 若原生成功，覆蓋候選並標記 source=native-exif
-  -> 若原生失敗且屬疑難樣本，再進入 exiftool fallback
-  -> 最後 fallback 到 mtime
+<archive-base>/<type>/YYYY/MM/YYYYMMDD_HHMMSS_SIZE.ext
 ```
 
-#### HEIC
+Examples:
 
 ```text
-文件名解析
-  -> Go 原生解析（若穩定）
+/archive/photos/2024/01/20240115_143052_1234567.jpg
+/archive/videos/2024/01/20240115_143052_987654321.mov
+```
+
+## Metadata strategy
+
+The runtime uses a cheap-to-expensive detection order.
+
+### Date source order
+
+By confidence:
+
+1. photo EXIF `DateTimeOriginal`
+2. photo EXIF `CreateDate`
+3. video `creation_time`
+4. filename parsing
+5. file `mtime`
+
+By runtime cost:
+
+1. filename parsing
+2. native Go metadata parsing
+3. external-tool fallback
+4. `mtime`
+
+### Per-type behavior
+
+JPEG:
+
+```text
+filename parse
+  -> native EXIF
+  -> mtime fallback
+```
+
+HEIC:
+
+```text
+filename parse
   -> exiftool fallback
   -> mtime
 ```
 
-#### 視頻 (MP4/MOV/3GP)
+Video:
 
 ```text
-文件名解析
-  -> Go 原生視頻 metadata 解析
+filename parse
   -> ffprobe / ffmpeg fallback
   -> mtime
 ```
 
-#### PNG
+PNG:
 
 ```text
-文件名解析
-  -> 必要時做有限 metadata 嘗試
+filename parse
   -> mtime
 ```
 
-### 2.4 外部工具策略
+### External tools
 
-外部工具不是主路徑，只是 fallback：
+External tools are fallback paths, not the default path.
 
-- `exiftool`：只處理 Go 原生不穩或不支持的圖片格式
-- `ffprobe` 或 `ffmpeg`：只處理原生視頻解析失敗的情況
+- `exiftool` is used only when native support is missing or weak.
+- `ffprobe` or `ffmpeg` is used only when video metadata cannot be obtained by
+  cheaper means.
 
-約束：
+Constraints:
 
-- 不允許每個文件啟動兩次 `exiftool`
-- 不允許 `sh -c 'ffmpeg ... | grep ...'` 這類額外 shell pipeline
-- 同一文件只允許進入一條 fallback 路徑
+- no double `exiftool` invocation for a single file
+- no shell pipelines like `ffmpeg | grep`
+- no unconditional external tool per file
 
-### 2.5 文件名解析規則
+## Job and task model
 
-支持的典型格式：
+The smallest unit of state is a file.
 
-```text
-IMG_20230115_143052.jpg      -> 2023-01-15 14:30:52
-VID_20230115_143052.mp4      -> 2023-01-15 14:30:52
-2023-01-15 14.30.52.jpg      -> 2023-01-15 14:30:52
-mmexport1674063052123.jpg    -> 13 位毫秒時間戳
-v-xxx.mp4                    -> 不可靠，通常不能從文件名取時間
-```
+Each task tracks:
 
----
+- source path
+- size
+- mtime
+- current status
+- extracted datetime
+- metadata source
+- optional md5
+- final target path
 
-## 3. 系統架構
-
-### 3.1 整體架構
-
-```text
-Go CLI Process
-  -> Scanner
-  -> Metadata Pipeline
-  -> Planner
-  -> MD5 Resolver
-  -> Writer Queue
-  -> Job Snapshot
-  -> Event Log
-```
-
-### 3.2 職責分配
-
-#### CLI 程序
-
-負責：
-
-- 啟動掃描任務
-- 啟動歸檔任務
-- 顯示文件列表、統計、進度
-- 顯示錯誤與重試入口
-- 導出結果或失敗列表
-
-內部模塊負責：
-
-- 掃描 upload 目錄
-- 建立 job
-- 執行 metadata pipeline
-- 計算 targetPath
-- 必要時計算 MD5
-- 將任務送入 writer queue
-- 寫入歸檔目錄
-- 寫入逐文件事件
-
-### 3.3 數據流
-
-```text
-1. 執行 `archive scan`
-2. 程序掃描文件並建立 job snapshot
-3. 執行 `archive run --job <jobId>`
-4. 程序按文件執行 pipeline
-5. 每次狀態變化都寫入 event log
-6. `archive watch --job <jobId>` 讀取事件並展示進度
-```
-
----
-
-## 4. 任務狀態管理
-
-### 4.1 狀態機
-
-每個文件都是獨立狀態機：
+### Task lifecycle
 
 ```text
 discovered
@@ -239,506 +147,94 @@ discovered
   -> moving
   -> completed
 
-任意階段
+Any stage may also end in:
   -> failed
   -> skipped
 ```
 
-補充：
+`skipped` is used for dry-run completion and for files that disappear during a
+run before they can be safely archived.
 
-- `md5_pending` 只在目標衝突時出現
-- `move_queued` 表示已進入 writer queue
-- `moving` 表示 writer 正在處理
+## Persistence model
 
-### 4.2 為什麼可以批量提交但仍精確追蹤
+Per job, the tool stores:
 
-批量只影響任務投遞，不影響狀態粒度。
+- `job.json`
+- `events.jsonl`
 
-每個文件必須有穩定的：
+`job.json` is the latest snapshot.  
+`events.jsonl` is an append-only event log.
 
-- `jobId`
-- `fileId`
-- `path`
+This supports:
 
-事件日誌也是逐文件的，所以 CLI 可以做到：
+- progress inspection
+- failure review
+- retries
+- post-run auditing
 
-- 一次提交 100 個文件
-- 逐個看到誰已 metadata 完成
-- 逐個看到誰進入 writer
-- 逐個看到誰失敗
+## Runtime pipeline
 
-### 4.3 任務數據結構
-
-```json
-{
-  "jobId": "job-001",
-  "fileId": "file-000001",
-  "sourcePath": "/input/IMG_001.jpg",
-  "size": 1234567,
-  "mtime": "2024-01-15T14:30:52Z",
-  "status": "metadata_done",
-  "errorMessage": null,
-  "datetimeOriginal": "2024-01-15T14:30:52Z",
-  "metadataSource": "native-exif",
-  "md5": null,
-  "md5ComputedAt": null,
-  "targetPath": "/archive/photos/2024/01/20240115_143052_1234567.jpg",
-  "archiveType": "photos",
-  "createdAt": "<timestamp>",
-  "updatedAt": "<timestamp>"
-}
-```
-
-### 4.4 事件數據結構
-
-```json
-{
-  "jobId": "job-001",
-  "fileId": "file-000001",
-  "path": "/input/IMG_001.jpg",
-  "stage": "metadata_done",
-  "status": "ok",
-  "datetime": "2024-01-15T14:30:52Z",
-  "source": "native-exif",
-  "targetPath": "",
-  "errorMessage": "",
-  "queuePosition": 0,
-  "eventSeq": 1024,
-  "emittedAt": "<timestamp>"
-}
-```
-
-### 4.5 Job 快照與恢復
-
-程序必須持久化：
-
-- job 基本信息
-- 任務列表
-- 最新狀態
-- 事件序號
-
-恢復流程：
-
-1. 程序啟動時讀取 snapshot
-2. 恢復未完成 job
-3. CLI 重新執行 `watch` 後可繼續觀察
-4. 必要時從指定 `eventSeq` 之後補發事件
-
----
-
-## 5. 並發控制設計
-
-### 5.1 Pipeline
+High-level flow:
 
 ```text
-Ingress Queue
-  -> Filename Parse Workers
-  -> Native Metadata Workers
-  -> Fallback Metadata Workers
-  -> Planner Workers
-  -> MD5 Resolver
-  -> Writer Queue
+scan
+  -> build job snapshot
+  -> run
+  -> metadata detection
+  -> target planning
+  -> duplicate resolution
+  -> single-writer archive move
+  -> snapshot/event persistence
 ```
 
-### 5.2 Worker 設計
+Concurrency model:
 
-#### Filename Parse Workers
+- metadata and planning can run concurrently
+- final writes remain single-writer
+- md5 is computed only on target collisions
 
-- 成本最低
-- 只做正則和時間戳解析
-- 可稍高並發
+## Duplicate handling
 
-#### Native Metadata Workers
+If the target path does not exist:
 
-- 執行 Go 原生圖片或視頻 metadata 解析
-- 是主路徑
-- 並發要保守，避免 ARM CPU 被打滿
+- write directly
 
-#### Fallback Metadata Workers
+If the target path already exists:
 
-- 只處理原生失敗的文件
-- `exiftool` 和視頻探測都歸此類
-- 數量必須非常少
+1. compute source md5
+2. compute destination md5
+3. if identical, append `_1`, `_2`, ...
+4. if different, append an 8-character hash suffix
 
-#### Planner Workers
+This preserves all variants instead of dropping content silently.
 
-- 負責根據 datetime、size、ext 生成 targetPath
-- 並檢查目標文件是否已存在
+## Cross-filesystem safety
 
-#### MD5 Resolver
+The tool first tries `rename`.
 
-- 僅處理目標衝突的文件
-- 不做全量 hash
+If the source and destination are on different filesystems, it falls back to:
 
-#### Writer Queue
+1. copy to a temp file in the destination directory
+2. flush the temp file
+3. rename temp file into place
+4. remove the source file
 
-- 單線程
-- FIFO
-- 原子 rename
+This is required for many NAS layouts where input and archive shares are not on
+the same filesystem.
 
-### 5.3 初始並發配置
+## CLI surface
 
-ARM NAS 的推薦初始值：
+Supported commands:
 
-- `FilenameWorkers = 4`
-- `NativeMetadataWorkers = 2`
-- `FallbackMetadataWorkers = 1`
-- `PlannerWorkers = 2`
-- `MD5Workers = 1`
-- `WriterWorkers = 1`
+- `archive scan`
+- `archive run`
+- `archive status`
+- `archive watch`
+- `archive files`
+- `archive retry`
+- `archive export`
+- `archive jobs`
 
-### 5.4 性能優化約束
+The CLI is job-oriented. It does not expose a server API and does not require a
+daemon process.
 
-必須遵守：
-
-1. 不做單文件多段串行調用
-   - 不把單個文件拆成多段串行子流程命令
-2. 不做全量 MD5
-3. 不做每文件多次 `exiftool`
-4. 不以輪詢作為主進度機制
-5. 不讓 CLI 控制 NAS 端並發細節
-6. 不引入常駐 server 或 daemon 作為首版前提
-
----
-
-## 6. 命令設計
-
-### 6.1 命令原則
-
-- 只提供命令行入口
-- 不引入 HTTP API、SSE 或本地 server
-- 不提供面向單文件的子命令鏈式調用
-- CLI 只操作 `job`
-
-### 6.2 命令列表
-
-| 命令 | 描述 |
-|------|------|
-| `archive scan` | 掃描指定目錄並建立 job |
-| `archive run` | 開始處理 job |
-| `archive watch` | 查看 job 進度 |
-| `archive status` | 查看 job 摘要與統計 |
-| `archive files` | 查詢文件列表 |
-| `archive retry` | 重試失敗文件 |
-| `archive export` | 導出錯誤或結果報表 |
-
-### 6.3 掃描命令
-
-```bash
-archive scan \
-  --path /input \
-  --ext .jpg,.jpeg,.heic,.png,.mp4,.mov,.3gp
-```
-
-```text
-Job: job-001
-Files: 123456
-Status: created
-ScannedAt: <timestamp>
-```
-
-### 6.4 啟動命令
-
-```bash
-archive run --job job-001 --archive-base /archive
-```
-
-```text
-Job: job-001
-Status: running
-```
-
-### 6.5 狀態命令
-
-```bash
-archive status --job job-001
-```
-
-```text
-Job: job-001
-Status: running
-Total: 123456
-Completed: 1034
-Failed: 3
-Queued: 800
-MetadataRunning: 2
-MD5Running: 1
-WriterQueueLength: 42
-StartedAt: <timestamp>
-UpdatedAt: <timestamp>
-```
-
-### 6.6 進度觀察命令
-
-```bash
-archive watch --job job-001
-```
-
-```text
-[10:00:03] file-000001 metadata_done source=native-exif
-[10:00:04] file-000002 failed error="rename failed"
-[10:00:05] file-000003 move_queued queue=42
-```
-
-### 6.7 為什麼用 event log 而不是 server streaming
-
-對這個項目，本地 event log 更合適：
-
-- 沒有網絡通信成本
-- 沒有常駐進程管理成本
-- CLI 實現簡單
-- 可直接用於恢復與審計
-- 對逐文件事件回報已足夠
-
----
-
-## 7. 去重與寫入策略
-
-### 7.1 目標路徑生成
-
-標準格式：
-
-```text
-YYYY/MM/YYYYMMDD_HHMMSS_SIZE.ext
-```
-
-按類型歸檔到：
-
-- `photos`
-- `videos`
-- `pngs`
-- `thumbnails`
-
-### 7.2 去重原則
-
-當目標路徑不存在：
-
-- 直接進入 writer
-
-當目標路徑已存在：
-
-1. 將當前文件標記為 `md5_pending`
-2. 計算源文件 MD5
-3. 嘗試讀取目標文件 MD5 緩存
-4. 無緩存時再計算目標文件 MD5
-5. MD5 相同則加序號 `_1`, `_2`
-6. MD5 不同則加 `_hash8`
-
-### 7.3 Writer 設計
-
-Writer 必須保持：
-
-- 單線程
-- FIFO
-- 原子移動
-- 落盤後再發 `completed`
-
-寫入流程：
-
-1. 重新校驗目標路徑
-2. 確保目標目錄存在
-3. 必要時做去重計算
-4. 執行 rename
-5. 更新任務狀態
-6. 推送事件
-
----
-
-## 8. 項目結構
-
-```text
-cli/
-├── cmd/
-│   └── archive/
-│       └── main.go
-├── internal/
-│   ├── commands/
-│   │   ├── scan.go
-│   │   ├── run.go
-│   │   ├── watch.go
-│   │   ├── status.go
-│   │   ├── files.go
-│   │   ├── retry.go
-│   │   └── export.go
-│   ├── job/
-│   │   ├── manager.go
-│   │   ├── snapshot.go
-│   │   └── events.go
-│   └── output/
-│       ├── table.go
-│       └── json.go
-└── go.mod
-
-nas-service/
-├── cmd/
-│   └── nas-service/
-│       └── main.go
-├── internal/
-│   ├── api/
-│   │   ├── jobs.go
-│   │   ├── events.go
-│   │   └── middleware.go
-│   ├── job/
-│   │   ├── manager.go
-│   │   ├── snapshot.go
-│   │   └── events.go
-│   ├── scanner/
-│   │   └── scanner.go
-│   ├── metadata/
-│   │   ├── filename.go
-│   │   ├── image.go
-│   │   ├── video.go
-│   │   └── fallback.go
-│   ├── planner/
-│   │   └── planner.go
-│   ├── dedup/
-│   │   ├── md5.go
-│   │   └── cache.go
-│   └── writer/
-│       └── worker.go
-└── scripts/
-    └── install.sh
-```
-
----
-
-## 9. 實現計劃
-
-### Phase 1: CLI 基礎
-
-- [ ] 搭建 Go CLI 框架
-- [ ] 實現 `scan`、`run`、`status`
-- [ ] 實現 job manager 與 snapshot
-- [ ] 實現 event log
-
-### Phase 2: Metadata Pipeline
-
-- [ ] 文件名解析
-- [ ] Go 原生 JPG/JPEG EXIF 解析
-- [ ] Go 原生視頻 metadata 解析
-- [ ] 外部工具 fallback
-
-### Phase 3: 歸檔核心流程
-
-- [ ] planner
-- [ ] 單 writer queue
-- [ ] 衝突時 MD5
-- [ ] 去重命名規則
-
-### Phase 4: CLI
-
-- [ ] `scan` 命令
-- [ ] `run` 命令
-- [ ] `watch` 命令
-- [ ] `files` 命令
-- [ ] `retry` 命令
-
-### Phase 5: 優化與測試
-
-- [ ] 10萬文件掃描測試
-- [ ] ARM NAS metadata 吞吐測試
-- [ ] 崩潰恢復測試
-- [ ] 權限與部署腳本完善
-
----
-
-## 10. 性能指標
-
-| 指標 | 目標 |
-|------|------|
-| 掃描 10 萬文件 | < 60 秒 |
-| metadata 吞吐 | 以原生解析為主，避免每文件外部進程 |
-| 全量歸檔 | 能穩定長時間執行，不要求一次性跑滿 CPU |
-| 寫入吞吐 | 100+ 文件/分鐘，取決於衝突率與磁盤性能 |
-| CLI 進度延遲 | 1 秒內可見 |
-| 內存佔用 | NAS 端可控，避免因任務列表爆炸失控 |
-
----
-
-## 11. 風險與對策
-
-### 11.1 Go 原生 metadata 兼容性不足
-
-風險：
-
-- HEIC、MOV、私有 metadata 可能不完整
-
-對策：
-
-- 保留外部工具 fallback
-- 用真實樣本集驗證支持率
-
-### 11.2 CLI 中斷或會話斷開
-
-風險：
-
-- SSH 斷開或 CLI 中止後，看不到即時輸出
-
-對策：
-
-- 本地持久化 job 與事件序號
-- 重新執行 `watch` 後從事件日誌恢復觀察
-
-### 11.3 ARM NAS 性能不足
-
-風險：
-
-- fallback 工具和大文件 MD5 可能拖慢全局吞吐
-
-對策：
-
-- 嚴格限制 fallback worker 數
-- 只在衝突時做 MD5
-- 先優化固定成本，再調整並發
-
-### 11.4 權限問題
-
-風險：
-
-- QNAP ACL 和 admin 權限模型特殊
-
-對策：
-
-- 服務以正確權限運行
-- 所有寫入操作集中在 NAS 服務中統一處理
-
----
-
-## 12. 最終結論
-
-本項目最終採用：
-
-- `Go CLI` 作為唯一客戶端
-- `Go CLI` 作為唯一執行引擎
-- `本地 snapshot + event log` 作為狀態與恢復機制
-- `逐文件狀態機` 作為任務跟蹤核心
-- `Go 原生 metadata 優先，外部工具 fallback` 作為性能優化方向
-- `單 writer + lazy MD5` 作為安全與性能平衡點
-
-這個方案放棄桌面客戶端、Web 前端、gRPC 與常駐 server，目標是讓系統更容易落地、更容易調試，並且在 ARM NAS 上更可控。
-| 快照文件大小 | < 100MB (10萬任務) |
-| 快照寫入時間 | < 1 秒 |
-| 恢復時間 | < 2 秒 |
-
----
-
-## 10. 風險與對策
-
-| 風險 | 對策 |
-|------|------|
-| 磁盤寫入衝突 | 單線程 Writer |
-| 並發過載 | 信號量控制 |
-| 數據丟失（崩潰） | 定時快照，最多丟失 5 秒 |
-| 網絡斷開 | 重試機制 |
-| NAS 重啟 | 服務自啟 |
-| 時間信息不準確 | 窮盡識別，標記來源 |
-
----
-
-## 11. 後續擴展
-
-- [ ] 支持 Windows/Linux 客戶端
-- [ ] Web 管理界面
-- [ ] 多 NAS 管理
-- [ ] 自動定時掃描
-- [ ] AI 照片分類

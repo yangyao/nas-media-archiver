@@ -323,13 +323,14 @@ func runScan(args []string) error {
 	if err := store.Ensure(); err != nil {
 		return err
 	}
-	jobID := "job-" + time.Now().Format("20060102-150405")
+	now := time.Now()
+	jobID := fmt.Sprintf("job-%s-%09d", now.Format("20060102-150405"), now.Nanosecond())
 	job := &Job{
 		ID:         jobID,
 		SourcePath: *path,
 		Status:     JobCreated,
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
+		CreatedAt:  now,
+		UpdatedAt:  now,
 		Tasks:      map[string]*Task{},
 	}
 	allowed := parseExts(*ext)
@@ -731,6 +732,9 @@ func processTask(ctx context.Context, events EventSink, job *Job, task *Task, dr
 	}
 	dt, src, err := detectDateTime(task.SourcePath, task.MTime)
 	if err != nil {
+		if isMissingSourceErr(err) {
+			return skipMissingTask(events, job, task, err)
+		}
 		task.Status = TaskFailed
 		task.ErrorMessage = err.Error()
 		task.UpdatedAt = time.Now()
@@ -764,6 +768,9 @@ func processTask(ctx context.Context, events EventSink, job *Job, task *Task, dr
 		_ = events.Append(Event{JobID: job.ID, FileID: task.FileID, Path: task.SourcePath, Stage: string(TaskMD5Pending), Status: "ok", TargetPath: target})
 		finalTarget, md5Value, err := resolveDuplicateTarget(task.SourcePath, target)
 		if err != nil {
+			if isMissingSourceErr(err) {
+				return skipMissingTask(events, job, task, err)
+			}
 			task.Status = TaskFailed
 			task.ErrorMessage = err.Error()
 			task.UpdatedAt = time.Now()
@@ -792,6 +799,9 @@ func processTask(ctx context.Context, events EventSink, job *Job, task *Task, dr
 		if _, err := os.Stat(task.TargetPath); err == nil {
 			finalTarget, md5Value, err := resolveDuplicateTarget(task.SourcePath, task.TargetPath)
 			if err != nil {
+				if isMissingSourceErr(err) {
+					return skipMissingTask(events, job, task, err)
+				}
 				task.Status = TaskFailed
 				task.ErrorMessage = err.Error()
 				task.UpdatedAt = time.Now()
@@ -824,6 +834,9 @@ func processTask(ctx context.Context, events EventSink, job *Job, task *Task, dr
 		return err
 	}
 	if err := moveFile(task.SourcePath, task.TargetPath); err != nil {
+		if isMissingSourceErr(err) {
+			return skipMissingTask(events, job, task, err)
+		}
 		task.Status = TaskFailed
 		task.ErrorMessage = err.Error()
 		task.UpdatedAt = time.Now()
@@ -834,6 +847,21 @@ func processTask(ctx context.Context, events EventSink, job *Job, task *Task, dr
 	task.UpdatedAt = time.Now()
 	_ = events.Append(Event{JobID: job.ID, FileID: task.FileID, Path: task.SourcePath, Stage: string(TaskCompleted), Status: "ok", TargetPath: task.TargetPath})
 	return nil
+}
+
+func skipMissingTask(events EventSink, job *Job, task *Task, err error) error {
+	task.Status = TaskSkipped
+	task.ErrorMessage = err.Error()
+	task.UpdatedAt = time.Now()
+	return events.Append(Event{
+		JobID:        job.ID,
+		FileID:       task.FileID,
+		Path:         task.SourcePath,
+		Stage:        string(TaskSkipped),
+		Status:       "ok",
+		ErrorMessage: err.Error(),
+		TargetPath:   task.TargetPath,
+	})
 }
 
 func detectDateTime(path string, mtime time.Time) (time.Time, string, error) {
@@ -1122,6 +1150,10 @@ func hasFailed(tasks map[string]*Task) bool {
 		}
 	}
 	return false
+}
+
+func isMissingSourceErr(err error) bool {
+	return errors.Is(err, os.ErrNotExist)
 }
 
 func coalesce(vs ...string) string {

@@ -1,22 +1,26 @@
 # QNAP Notes
 
-This document covers the QNAP-specific operational details that matter when
-running `nas-media-archiver`.
+This document captures the operational differences that matter when running
+`nas-media-archiver` on QNAP NAS devices.
 
-## Why QNAP needs special handling
+## Why QNAP is special
 
-QNAP behaves differently from a generic Linux host in a few important ways:
+Compared with a generic Linux host, QNAP commonly introduces:
 
-- shared-folder ACL behavior can override manual permission changes
-- the `admin` account may not be available for direct SSH login
-- tool availability varies by firmware and Entware packages
+- shared-folder ACL behavior that can override manual permission changes
+- restricted `admin` login behavior
+- older bundled media tools
+- Entware-installed tools that may live outside the default `PATH`
 
-These differences affect how you run real archive writes.
+Those differences mostly affect real archive writes and metadata fallback tools.
 
-## Recommended execution model
+## Recommended workflow
 
-Use a normal SSH user to upload or invoke the binary, then use `sudo -u admin`
-for the real archive run when writing into shared folders.
+1. Upload the binary to a stable path on the NAS.
+2. Run `scan`.
+3. Run `run --dry-run`.
+4. Inspect `status`, `files`, and failures.
+5. Run the real archive with `sudo -u admin`.
 
 Example:
 
@@ -37,9 +41,20 @@ sudo -u admin ./archive run \
   --state-dir /path/to/archive-state
 ```
 
-## Tooling notes
+## Permissions
 
-Typical QNAP environments may provide:
+If archive writes fail on QNAP, check:
+
+1. whether the process has shared-folder write permission
+2. whether ACL behavior is undoing manual chmod or chown changes
+3. whether you are writing into a protected share without admin context
+
+In practice, real writes into shared archive directories often need
+`sudo -u admin`.
+
+## Tool availability
+
+Typical built-in tools:
 
 - `find`
 - `stat`
@@ -47,43 +62,37 @@ Typical QNAP environments may provide:
 - `date`
 - `ffmpeg`
 
-If Entware is installed, you may also have:
+Common Entware additions:
 
 - `exiftool`
 - `perl`
 
-Important:
+Notes:
 
 - `exiftool` may live under `/opt/bin`
-- `ffprobe` may be unavailable even if `ffmpeg` exists
-- older QNAP systems often ship older `ffmpeg`
+- `ffprobe` may not exist even if `ffmpeg` does
+- QNAP-shipped `ffmpeg` versions may be old
 
 ## Metadata implications
 
-In practice:
+On QNAP systems:
 
 - JPEG usually works well with native EXIF parsing
-- HEIC often benefits from `exiftool` fallback
-- video metadata fallback may depend on `ffprobe` or `ffmpeg`
-- PNG often falls back to filename parsing or `mtime`
+- HEIC may rely on `exiftool`
+- video fallback may rely on `ffprobe` or `ffmpeg`
+- PNG usually falls back to filename parsing or `mtime`
 
-## Permission model
+## Filesystem layout
 
-When archive writes fail unexpectedly on QNAP, check:
+Some QNAP setups place the input share and the archive share on different
+filesystems. In that case, plain `rename` fails with a cross-device error.
 
-1. whether the process is running with sufficient shared-folder privileges
-2. whether ACL rules are overriding manual chmod or chown changes
-3. whether the target archive path is on a different filesystem
+The tool already handles this by using copy-then-rename fallback.
 
-The program already supports cross-filesystem safe moves via copy-then-rename
-fallback, so the remaining issue is usually permissions rather than rename
-semantics.
+## Operational advice
 
-## Recommended workflow
-
-1. Upload the binary to a stable path on the NAS.
-2. Run `scan`.
-3. Run `run --dry-run`.
-4. Inspect `status`, `files`, and any failures.
-5. Run the real archive with `sudo -u admin`.
+- prefer dry runs before real writes
+- keep a dedicated state directory outside transient temp paths
+- use stable binary deployment paths on the NAS
+- validate `exiftool` and video tooling before large archive jobs
 
