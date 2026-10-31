@@ -1,0 +1,8 @@
+# This file is copied to the data volume on first install and never overwritten.
+# Edit as an administrator while the service is stopped, then start it again.
+# Shell syntax; keep values quoted. Never add a token or password here.
+LISTEN="0.0.0.0:8787"
+NAME="My Archive Server"
+ARCHIVE_BASE="/share/archive"
+ROOTS="/share/ssd/upload,/share/archive"
+STOP_TIMEOUT="120"

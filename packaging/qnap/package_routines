@@ -1,0 +1,38 @@
+# Sourced by QDK's installer. Keep all persistent data outside SYS_QPKG_DIR.
+pkg_check_requirement() {
+    case "$(uname -m)" in
+        aarch64|arm64) ;;
+        *) err_log "This package requires an ARM64 QNAP NAS." ;;
+    esac
+}
+
+pkg_pre_install() {
+    # QDK itself ignores the service stop command's exit status. Refuse to
+    # replace the executable while a long-running file is still finishing.
+    if [ -x "$SYS_QPKG_DIR/NASMediaArchiver.sh" ] &&
+        "$SYS_QPKG_DIR/NASMediaArchiver.sh" status >/dev/null 2>&1; then
+        err_log "The service is still finishing a file. Wait for it to stop before upgrading."
+    fi
+}
+
+pkg_post_install() {
+    nma_volume=$(dirname "$(dirname "$SYS_QPKG_DIR")")
+    nma_data="$nma_volume/.nas-media-archiver"
+    (umask 077; mkdir -p "$nma_data/state") || err_log "Cannot create persistent application data."
+    chmod 700 "$nma_data" "$nma_data/state" || err_log "Cannot protect application data."
+    if [ ! -f "$nma_data/service.conf" ]; then
+        (umask 077; cp "$SYS_QPKG_DIR/service.conf.example" "$nma_data/service.conf") ||
+            err_log "Cannot initialize service configuration."
+    fi
+    chmod 600 "$nma_data/service.conf" || err_log "Cannot protect service configuration."
+    chmod 755 "$SYS_QPKG_DIR/NASMediaArchiver.sh" "$SYS_QPKG_DIR/bin/archive" ||
+        err_log "Cannot make service executable."
+    # qinstall preserves existing Enable state on upgrade. On a fresh install,
+    # leave its default disabled state so roots can be reviewed before enabling.
+    log "Configuration and job state are retained at $nma_data. Review service.conf before enabling."
+    log "Metadata tools: ExifTool (/opt/bin/exiftool) and ffprobe/ffmpeg are optional but recommended."
+}
+
+# Removal intentionally retains volume/.nas-media-archiver, including database,
+# token, configuration and logs. Never remove user archive/source directories.
+PKG_PRE_REMOVE='if [ -x /etc/init.d/NASMediaArchiver.sh ] && /etc/init.d/NASMediaArchiver.sh status >/dev/null 2>&1; then echo "NAS Media Archiver is still running; removal was aborted." >&2; exit 1; fi'

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/md5"
+	"crypto/sha256"
 	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
@@ -265,6 +266,8 @@ func main() {
 		os.Exit(1)
 	}
 	switch os.Args[1] {
+	case "serve":
+		must(runServe(os.Args[2:]))
 	case "scan":
 		must(runScan(os.Args[2:]))
 	case "run":
@@ -289,6 +292,7 @@ func main() {
 
 func usage() {
 	fmt.Fprintf(os.Stderr, `archive commands:
+  serve   [--listen 127.0.0.1:8787] [--state-dir <dir>] [--token-file <file>]
   scan    --path <dir> [--ext .jpg,.mp4] [--state-dir .archive-jobs]
   run     --job <job-id> --archive-base <dir> [--dry-run]
   status  --job <job-id>
@@ -310,7 +314,7 @@ func must(err error) {
 func runScan(args []string) error {
 	flags := flag.NewFlagSet("scan", flag.ContinueOnError)
 	path := flags.String("path", "", "source path")
-	ext := flags.String("ext", ".jpg,.jpeg,.heic,.png,.mp4,.mov,.3gp", "comma-separated extensions")
+	ext := flags.String("ext", ".jpg,.jpeg,.heic,.png,.webp,.mp4,.mov,.3gp", "comma-separated extensions")
 	stateDir := flags.String("state-dir", ".archive-jobs", "state dir")
 	recursive := flags.Bool("recursive", true, "recursive scan")
 	if err := flags.Parse(args); err != nil {
@@ -340,7 +344,7 @@ func runScan(args []string) error {
 			return err
 		}
 		if d.IsDir() {
-			if p != *path && !*recursive {
+			if p != *path && (d.Name() == ".@__thumb" || d.Name() == "@eaDir" || !*recursive) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -786,7 +790,7 @@ func processTask(ctx context.Context, events EventSink, job *Job, task *Task, dr
 		_ = events.Append(Event{JobID: job.ID, FileID: task.FileID, Path: task.SourcePath, Stage: string(TaskMD5Running), Status: "ok", TargetPath: finalTarget})
 	}
 	if dryRun {
-		task.Status = TaskSkipped
+		task.Status = TaskPlanningDone
 		task.UpdatedAt = time.Now()
 		_ = events.Append(Event{
 			JobID: job.ID, FileID: task.FileID, Path: task.SourcePath, Stage: "dry_run_done", Status: "ok", TargetPath: task.TargetPath,
@@ -874,7 +878,7 @@ func detectDateTime(path string, mtime time.Time) (time.Time, string, error) {
 		if dt, err := extractJPEGExif(path); err == nil {
 			return dt, "native-exif", nil
 		}
-	case ".heic":
+	case ".heic", ".png", ".webp":
 		if dt, err := extractWithExiftool(path); err == nil {
 			return dt, "exiftool", nil
 		}
@@ -1005,7 +1009,7 @@ func planTarget(base string, task *Task) (string, string, bool, error) {
 
 func classifyArchiveType(path string) string {
 	switch strings.ToLower(filepath.Ext(path)) {
-	case ".jpg", ".jpeg", ".heic":
+	case ".jpg", ".jpeg", ".heic", ".webp":
 		return "photos"
 	case ".png":
 		return "pngs"
@@ -1096,7 +1100,8 @@ func moveFile(source, target string) error {
 		}
 	}()
 
-	if _, err := io.Copy(out, in); err != nil {
+	sourceHash := sha256.New()
+	if _, err := io.Copy(out, io.TeeReader(in, sourceHash)); err != nil {
 		return err
 	}
 	if err := out.Sync(); err != nil {
@@ -1104,6 +1109,22 @@ func moveFile(source, target string) error {
 	}
 	if err := out.Close(); err != nil {
 		return err
+	}
+	verify, err := os.Open(tmp)
+	if err != nil {
+		return err
+	}
+	targetHash := sha256.New()
+	_, verifyErr := io.Copy(targetHash, verify)
+	closeErr := verify.Close()
+	if verifyErr != nil {
+		return verifyErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if !strings.EqualFold(hex.EncodeToString(sourceHash.Sum(nil)), hex.EncodeToString(targetHash.Sum(nil))) {
+		return errors.New("cross-filesystem copy checksum mismatch")
 	}
 	if err := os.Rename(tmp, target); err != nil {
 		return err
