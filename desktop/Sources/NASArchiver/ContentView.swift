@@ -33,6 +33,11 @@ struct ContentView: View {
                 }
                 if let job = model.selectedJob {
                     JobDetailView(job: job).id(job.id)
+                } else if model.selectedConnection == nil {
+                    Button("連線服務", systemImage: "link") { editConnection() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
