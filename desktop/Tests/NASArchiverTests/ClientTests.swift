@@ -101,7 +101,7 @@ final class ClientTests: XCTestCase {
             _ = try await client.info()
             XCTFail("Expected server error")
         } catch {
-            XCTAssertEqual(error.localizedDescription, "權杖已失效")
+            XCTAssertEqual(error.localizedDescription, "連線密碼不正確，請重新輸入。")
             XCTAssertFalse(error.localizedDescription.contains("private-token"))
         }
     }

@@ -18,6 +18,8 @@ final class AppModel: ObservableObject {
     @Published var connectionEditor: ConnectionEditorTarget?
     @Published var showNewArchive = false
 
+    private let defaults: UserDefaults
+    private let session: URLSession
     private var client: APIClient?
     private var connectionTask: Task<Void, Never>?
     private var updatesTask: Task<Void, Never>?
@@ -29,10 +31,12 @@ final class AppModel: ObservableObject {
     var selectedJob: ArchiveJob? { jobs.first { $0.id == selectedJobID } }
     var connectionLabel: String { isConnecting ? "正在連線" : (isConnected ? "已連線" : "未連線") }
 
-    init() {
-        if let data = UserDefaults.standard.data(forKey: "nasConnections"),
+    init(defaults: UserDefaults = .standard, session: URLSession = .shared) {
+        self.defaults = defaults
+        self.session = session
+        if let data = defaults.data(forKey: "nasConnections"),
            let values = try? JSONDecoder().decode([NASConnection].self, from: data) { connections = values }
-        let storedID = UserDefaults.standard.string(forKey: "selectedNAS").flatMap(UUID.init(uuidString:))
+        let storedID = defaults.string(forKey: "selectedNAS").flatMap(UUID.init(uuidString:))
         if let connection = connections.first(where: { $0.id == storedID }) ?? connections.first { connect(connection) }
     }
 
@@ -40,15 +44,15 @@ final class AppModel: ObservableObject {
         if let selectedConnectionID, let selectedJobID { selectedJobForConnection[selectedConnectionID] = selectedJobID }
         connectionTask?.cancel(); updatesTask?.cancel()
         selectedConnectionID = connection.id
-        UserDefaults.standard.set(connection.id.uuidString, forKey: "selectedNAS")
+        defaults.set(connection.id.uuidString, forKey: "selectedNAS")
         selectedJobID = selectedJobForConnection[connection.id]
         serverInfo = nil; jobs = []; isConnected = false; isConnecting = true
         client = nil; isStreaming = false; updatesMessage = nil; errorMessage = nil
         connectionTask = Task {
             do {
                 let token = try TokenStore.token(for: connection.id)
-                guard !token.isEmpty else { throw ServiceError(message: "請在目前服務端設定中填寫連線權杖。") }
-                let api = try APIClient(address: connection.address, token: token)
+                guard !token.isEmpty else { throw ServiceError(message: "請在目前服務端設定中填寫連線密碼。") }
+                let api = try APIClient(address: connection.address, token: token, session: session)
                 let info = try await api.info()
                 let values = try await api.jobs()
                 try Task.checkCancellation()
@@ -63,23 +67,29 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func saveConnection(_ connection: NASConnection, token: String) throws {
-        _ = try APIClient(address: connection.address, token: token)
-        guard !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ServiceError(message: "請填寫服務端生成的連線權杖。") }
+    func saveConnection(_ connection: NASConnection, token: String) async throws {
+        _ = try APIClient(address: connection.address, token: token, session: session)
+        guard !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ServiceError(message: "請填寫服務端生成的連線密碼。") }
         try TokenStore.save(token.trimmingCharacters(in: .whitespacesAndNewlines), for: connection.id)
         var next = connections
         if let index = next.firstIndex(where: { $0.id == connection.id }) { next[index] = connection }
         else { next.append(connection) }
         let encoded = try JSONEncoder().encode(next)
-        UserDefaults.standard.set(encoded, forKey: "nasConnections")
+        defaults.set(encoded, forKey: "nasConnections")
         connections = next
         connect(connection)
+        let attempt = connectionTask
+        await attempt?.value
+        try Task.checkCancellation()
+        guard selectedConnectionID == connection.id, isConnected else {
+            throw ServiceError(message: errorMessage ?? "無法連線，請檢查服務地址與密碼。")
+        }
     }
 
     func removeConnection(_ connection: NASConnection) throws {
         try TokenStore.remove(connection.id)
         let next = connections.filter { $0.id != connection.id }
-        UserDefaults.standard.set(try JSONEncoder().encode(next), forKey: "nasConnections")
+        defaults.set(try JSONEncoder().encode(next), forKey: "nasConnections")
         connections = next
         if selectedConnectionID == connection.id {
             connectionTask?.cancel(); updatesTask?.cancel(); client = nil
@@ -183,7 +193,7 @@ final class AppModel: ObservableObject {
     }
 
     private func notifyIfCompleted(_ job: ArchiveJob, previous: ArchiveJob?) {
-        guard UserDefaults.standard.bool(forKey: "completionNotifications"), let previous,
+        guard defaults.bool(forKey: "completionNotifications"), let previous,
               !previous.isTerminal, job.isTerminal else { return }
         let content = UNMutableNotificationContent()
         content.title = job.failedFiles == 0 ? "歸檔完成" : "歸檔完成，有檔案需要關注"

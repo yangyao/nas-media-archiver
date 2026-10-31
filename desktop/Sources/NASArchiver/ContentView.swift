@@ -58,6 +58,16 @@ struct ContentView: View {
         .sheet(isPresented: $model.showNewArchive) {
             NewArchiveView().environmentObject(model)
         }
+        .onAppear {
+            if !model.isConnected && !model.isConnecting {
+                editConnection()
+            }
+        }
+        .onChange(of: model.isConnecting) { _, connecting in
+            if !connecting && !model.isConnected && model.connectionEditor == nil {
+                editConnection()
+            }
+        }
     }
 
     private var connectionFooter: some View {
@@ -81,7 +91,7 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("服務連線設定，\(model.connectionLabel)")
-            .help("設定歸檔服務的地址與連線權杖")
+            .help("設定歸檔服務的地址與連線密碼")
         }
         .background(.bar)
     }

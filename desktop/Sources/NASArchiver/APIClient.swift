@@ -38,9 +38,9 @@ struct APIClient: Sendable {
     private func check(_ response: URLResponse, data: Data? = nil) throws {
         guard let response = response as? HTTPURLResponse else { throw ServiceError(message: "服務端回傳了無法識別的響應。") }
         guard (200..<300).contains(response.statusCode) else {
+            if response.statusCode == 401 { throw ServiceError(message: "連線密碼不正確，請重新輸入。") }
             struct Envelope: Decodable { struct Detail: Decodable { var message: String }; var error: Detail }
             if let data, let error = try? JSONDecoder().decode(Envelope.self, from: data) { throw ServiceError(message: error.error.message) }
-            if response.statusCode == 401 { throw ServiceError(message: "連線權杖無效，請檢查目前服務端設定。") }
             throw ServiceError(message: "服務端請求失敗（HTTP \(response.statusCode)）。")
         }
     }

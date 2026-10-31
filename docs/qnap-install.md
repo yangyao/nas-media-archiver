@@ -101,7 +101,7 @@ QDK's default icons are used until application icons are supplied.
    writes to protected archive shares. It does not use a stored sudo password.
 5. Add the archive server in the Mac app using `http://NAS-LAN-ADDRESS:8787` and the token
    read locally by an administrator from the data directory's `token` file.
-   The Mac client stores it in Keychain. The Web landing page and logs never
+   The Mac client saves it in a user-only local credential file, without Keychain access. The Web landing page and logs never
    expose the token.
 
 The default listener is intentionally available on the LAN so the Mac client

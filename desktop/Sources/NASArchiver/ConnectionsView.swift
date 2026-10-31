@@ -11,6 +11,7 @@ struct ConnectionEditorView: View {
     @State private var error: String?
     @State private var confirmRemoval = false
     @State private var testing = false
+    @State private var saving = false
     @State private var testResult: String?
 
     var body: some View {
@@ -24,11 +25,11 @@ struct ConnectionEditorView: View {
                 Section("連線") {
                     TextField("服務地址", text: $address, prompt: Text("http://192.168.2.196:8787"))
                         .autocorrectionDisabled()
-                    SecureField("連線權杖", text: $token)
-                    Text("請填寫歸檔服務端的 HTTP / HTTPS 地址，不是 QTS 或 SSH 登入地址。服務端可安裝在 NAS 上，權杖保存在 macOS 鑰匙串中。")
+                    SecureField("連線密碼", text: $token, prompt: Text("服務端提供的 Token"))
+                    Text("使用服務端提供的 Token，密碼會儲存在本機，不使用鑰匙串。")
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
-                        Button(testing ? "正在測試…" : "測試連線") { Task { await testConnection() } }.disabled(testing)
+                        Button(testing ? "正在測試…" : "測試連線") { Task { await testConnection() } }.disabled(testing || saving)
                         if let testResult { Text(testResult).font(.caption).foregroundStyle(.green) }
                     }
                 }
@@ -46,16 +47,21 @@ struct ConnectionEditorView: View {
             }.formStyle(.grouped)
             Divider()
             HStack {
-                if connection != nil {
+                if connection != nil && model.isConnected {
                     Button("移除連線…", role: .destructive) { confirmRemoval = true }
+                        .disabled(saving)
                 }
                 Spacer()
-                Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("保存並連線") { save() }.keyboardShortcut(.defaultAction)
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || token.isEmpty || testing)
+                if model.isConnected {
+                    Button("取消") { dismiss() }.keyboardShortcut(.cancelAction).disabled(saving)
+                }
+                Button(saving ? "正在連線…" : "連線") { Task { await save() } }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || token.isEmpty || testing || saving)
             }.padding(20)
         }
         .frame(width: 580, height: connection == nil ? 460 : 620)
+        .interactiveDismissDisabled(!model.isConnected || saving)
         .onAppear {
             if let connection {
                 name = connection.name; address = connection.address
@@ -67,13 +73,17 @@ struct ConnectionEditorView: View {
                 guard let connection else { return }
                 do { try model.removeConnection(connection); dismiss() } catch { self.error = presentableError(error) }
             }
-        } message: { Text("只移除 Mac 上保存的連線和權杖，服務端上的任務繼續運行。") }
+        } message: { Text("只移除 Mac 上保存的連線和密碼，服務端上的任務繼續運行。") }
     }
 
-    private func save() {
+    private func save() async {
+        guard !saving else { return }
+        saving = true; error = nil
+        defer { saving = false }
         do {
-            let value = NASConnection(id: connection?.id ?? UUID(), name: name.trimmingCharacters(in: .whitespacesAndNewlines), address: address.trimmingCharacters(in: .whitespacesAndNewlines))
-            try model.saveConnection(value, token: token); dismiss()
+            let value = NASConnection(id: connection?.id ?? model.selectedConnectionID ?? UUID(), name: name.trimmingCharacters(in: .whitespacesAndNewlines), address: address.trimmingCharacters(in: .whitespacesAndNewlines))
+            try await model.saveConnection(value, token: token)
+            dismiss()
         } catch { self.error = presentableError(error) }
     }
     private func testConnection() async {
@@ -116,7 +126,7 @@ struct ClientSettingsView: View {
             }.formStyle(.grouped).tabItem { Label("通用", systemImage: "gearshape") }
             VStack(alignment: .leading, spacing: 16) {
                 Text("服務端連線").font(.headline)
-                Text("點擊主視窗左下角的設定，即可修改歸檔服務的連線地址與權杖。")
+                Text("點擊主視窗左下角的設定，即可修改歸檔服務的連線地址與密碼。")
                     .foregroundStyle(.secondary)
                 if let connection = model.selectedConnection {
                     LabeledContent("服務地址", value: connection.address).font(.callout)

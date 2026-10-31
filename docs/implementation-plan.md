@@ -12,11 +12,11 @@ Workflow: select one or more server folders -> asynchronous scan/metadata previe
 
 - `archive.go`: existing CLI and metadata/file helpers.
 - `server*.go` / `service*.go`: authenticated API, SQLite job store, worker queue, durable copy journal and SSE.
-- `desktop/`: Swift package, native views, URLSession API, Keychain tokens and macOS app packaging.
+- `desktop/`: Swift package, native views, URLSession API, app-local connection passwords and macOS app packaging.
 - `packaging/qnap/`: QDK configuration and QPKG service lifecycle.
 - `docs/service-api.md`: shared API contract.
 
-Go embeds the lightweight setup/status page. QPKG serves this page from its Open action; it is not a second full client. Bearer authentication protects all API operations. The server resolves allowed roots and source/target paths and prevents overlapping jobs from claiming the same files. Sensitive credentials are never committed or stored in the client preferences.
+Go embeds the lightweight setup/status page. QPKG serves this page from its Open action; it is not a second full client. Bearer authentication protects all API operations. The server resolves allowed roots and source/target paths and prevents overlapping jobs from claiming the same files. Client credentials are stored in user-only app-local files (0700 directory, 0600 files), separate from UserDefaults, and are never committed. No Keychain calls are used, including during upgrade.
 
 ## Validation
 

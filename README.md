@@ -49,8 +49,8 @@ make build
 ```
 
 The service generates a private random token file when it does not exist. Enter
-that token and the server URL in the Mac app's **Add Server** panel. Tokens are stored
-in macOS Keychain. Default service binding is loopback; LAN use requires an
+that token and the server URL in the Mac app's **連線設定** panel (the field is labelled **連線密碼**). Tokens are stored
+in a private app-owned local file, without Keychain prompts. Default service binding is loopback; LAN use requires an
 explicit listen address, and the token is required for API access. For an
 untrusted network, terminate TLS in front of the service rather than sending
 bearer tokens over plaintext HTTP.
