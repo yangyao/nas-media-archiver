@@ -5,22 +5,14 @@ struct ContentView: View {
 
     private var activeJobs: [ArchiveJob] { model.jobs.filter { !$0.isTerminal } }
     private var historyJobs: [ArchiveJob] { model.jobs.filter { $0.isTerminal } }
-    private var subtitle: String {
-        if model.isConnecting { return "正在連線…" }
-        if !model.isConnected { return "尚未連線" }
-        return activeJobs.isEmpty ? "沒有進行中的任務" : "\(activeJobs.count) 個任務"
-    }
 
     var body: some View {
         NavigationSplitView {
             List(selection: $model.selectedJobID) {
-                Section("正在處理") {
-                    if activeJobs.isEmpty {
-                        Text("沒有進行中的任務")
-                            .font(.callout).foregroundStyle(.tertiary)
-                            .padding(.vertical, 5)
+                if !activeJobs.isEmpty {
+                    Section("正在處理") {
+                        ForEach(activeJobs) { job in JobRow(job: job).tag(job.id) }
                     }
-                    ForEach(activeJobs) { job in JobRow(job: job).tag(job.id) }
                 }
                 if !historyJobs.isEmpty {
                     Section("歷史記錄") {
@@ -42,28 +34,11 @@ struct ContentView: View {
                 if let job = model.selectedJob {
                     JobDetailView(job: job).id(job.id)
                 } else {
-                    VStack(spacing: 12) {
-                        Text(model.isConnected ? "選擇一個歸檔任務" : "連線後開始整理照片")
-                            .font(.headline).foregroundStyle(.secondary)
-                        if model.isConnected && model.jobs.isEmpty {
-                            Button("新增歸檔…") { model.showNewArchive = true }
-                        } else if !model.isConnected && !model.isConnecting {
-                            Button("設定連線…") { editConnection() }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         }
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("媒體歸檔").font(.headline)
-                    Text(subtitle).font(.caption2).foregroundStyle(.secondary)
-                }
-                .padding(.leading, 2)
-            }
-            .sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .automatic) {
                 Button("新增歸檔", systemImage: "plus") { model.showNewArchive = true }
                     .labelStyle(.iconOnly)
