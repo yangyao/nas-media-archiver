@@ -22,6 +22,8 @@ final class ConnectionFlowTests: XCTestCase {
         XCTAssertFalse(model.isConnecting)
         XCTAssertEqual(model.serverInfo?.name, "Test service")
         XCTAssertEqual(model.jobs, [])
+        XCTAssertTrue(model.needsArchiveOnboarding)
+        XCTAssertTrue(model.showNewArchive)
         XCTAssertEqual(try TokenStore.token(for: connection.id), "valid-connection-test-token")
     }
 
@@ -31,6 +33,51 @@ final class ConnectionFlowTests: XCTestCase {
 
     func testInitialTaskLoadFailureDoesNotCompleteConnection() async throws {
         try await assertConnectionFailure(token: "failing-jobs-test-token", expected: "Tasks unavailable")
+    }
+
+    func testArchiveOnboardingWaitsUntilConnectionSheetIsDismissed() async throws {
+        let suite = "connection-flow-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ConnectionFlowProtocol.self]
+        let session = URLSession(configuration: config)
+        let model = AppModel(defaults: defaults, session: session)
+        let connection = NASConnection(name: "Test service", address: "http://test-service:8787")
+        defer {
+            try? model.removeConnection(connection)
+            defaults.removePersistentDomain(forName: suite)
+            session.invalidateAndCancel()
+        }
+        model.connectionEditor = .init(connection: nil)
+        try await model.saveConnection(connection, token: "valid-connection-test-token")
+        XCTAssertTrue(model.needsArchiveOnboarding)
+        XCTAssertFalse(model.showNewArchive, "Never present two sheets at once")
+        model.connectionEditor = nil
+        model.presentArchiveOnboardingIfNeeded()
+        XCTAssertTrue(model.showNewArchive)
+        model.presentArchiveOnboardingIfNeeded()
+        XCTAssertTrue(model.showNewArchive)
+    }
+
+    func testExistingActiveOrHistoricalTasksSkipArchiveOnboarding() async throws {
+        for token in ["existing-running-test-token", "existing-completed-test-token"] {
+            let suite = "connection-flow-\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            let config = URLSessionConfiguration.ephemeral
+            config.protocolClasses = [ConnectionFlowProtocol.self]
+            let session = URLSession(configuration: config)
+            let model = AppModel(defaults: defaults, session: session)
+            let connection = NASConnection(name: "Test service", address: "http://test-service:8787")
+            defer {
+                try? model.removeConnection(connection)
+                defaults.removePersistentDomain(forName: suite)
+                session.invalidateAndCancel()
+            }
+            try await model.saveConnection(connection, token: token)
+            XCTAssertEqual(model.jobs.count, 1)
+            XCTAssertFalse(model.needsArchiveOnboarding)
+            XCTAssertFalse(model.showNewArchive)
+        }
     }
 
     private func assertConnectionFailure(token: String, expected: String) async throws {
@@ -54,6 +101,7 @@ final class ConnectionFlowTests: XCTestCase {
         }
         XCTAssertFalse(model.isConnected)
         XCTAssertFalse(model.isConnecting)
+        XCTAssertFalse(model.showNewArchive)
     }
 }
 
@@ -75,6 +123,10 @@ private final class ConnectionFlowProtocol: URLProtocol, @unchecked Sendable {
         } else if path.hasSuffix("/jobs"), credential == "Bearer failing-jobs-test-token" {
             status = 503
             payload = #"{"error":{"code":"unavailable","message":"Tasks unavailable"}}"#
+        } else if path.hasSuffix("/jobs"), credential.contains("existing-") {
+            status = 200
+            let state = credential.contains("running") ? "running" : "completed"
+            payload = existingOnboardingJob.replacingOccurrences(of: "JOB_STATUS", with: state)
         } else if path.hasSuffix("/events") {
             status = 200; type = "text/event-stream"; payload = ": connected\n\n"
         } else {
@@ -87,3 +139,7 @@ private final class ConnectionFlowProtocol: URLProtocol, @unchecked Sendable {
     }
     override func stopLoading() {}
 }
+
+private let existingOnboardingJob = #"""
+[{"id":"existing-job","name":"Existing task","sourcePaths":["/input"],"archiveBase":"/archive","cleanupEmptyDirectories":true,"status":"JOB_STATUS","createdAt":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:00Z","totalFiles":1,"completedFiles":1,"failedFiles":0,"attentionFiles":0,"totalBytes":10,"completedBytes":10,"currentFile":"","currentFileBytes":0,"dateRangeStart":"","dateRangeEnd":"","error":"","cleanupStatus":"done","residualPaths":[]}]
+"""#

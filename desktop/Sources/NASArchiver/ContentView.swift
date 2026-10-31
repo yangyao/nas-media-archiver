@@ -52,15 +52,17 @@ struct ContentView: View {
             }
         }
         .toolbar(removing: .title)
-        .sheet(item: $model.connectionEditor) { target in
+        .sheet(item: $model.connectionEditor, onDismiss: model.presentArchiveOnboardingIfNeeded) { target in
             ConnectionEditorView(connection: target.connection).environmentObject(model)
         }
-        .sheet(isPresented: $model.showNewArchive) {
-            NewArchiveView().environmentObject(model)
+        .sheet(isPresented: $model.showNewArchive, onDismiss: model.presentArchiveOnboardingIfNeeded) {
+            NewArchiveView(requiresSelection: model.jobs.isEmpty).environmentObject(model)
         }
         .onAppear {
             if !model.isConnected && !model.isConnecting {
                 editConnection()
+            } else {
+                model.presentArchiveOnboardingIfNeeded()
             }
         }
         .onChange(of: model.isConnecting) { _, connecting in

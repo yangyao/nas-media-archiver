@@ -3,6 +3,7 @@ import SwiftUI
 struct NewArchiveView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    var requiresSelection = false
     @State private var listing: DirectoryListing?
     @State private var path = ""
     @State private var selectedPaths: Set<String> = []
@@ -20,7 +21,7 @@ struct NewArchiveView: View {
                 Image(systemName: "folder.badge.plus").font(.title2).foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 5) {
                     Text("新增歸檔").font(.title2.weight(.semibold))
-                    Text("選擇 \(model.selectedConnection?.name ?? "服務端") 上的資料夾，先掃描，再決定開始。")
+                    Text("選擇資料夾，先掃描預覽。")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -110,13 +111,16 @@ struct NewArchiveView: View {
             HStack {
                 Label("掃描不會移動檔案", systemImage: "checkmark.shield").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("取消") { dismiss() }.keyboardShortcut(.cancelAction).disabled(submitting)
+                if !requiresSelection {
+                    Button("取消") { dismiss() }.keyboardShortcut(.cancelAction).disabled(submitting)
+                }
                 Button(submitting ? "正在建立…" : "掃描預覽") { Task { await create() } }
                     .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
                     .disabled(selectedPaths.isEmpty || archiveBase.isEmpty || submitting || !model.isConnected)
             }.padding(20)
         }
         .frame(width: 920, height: 650)
+        .interactiveDismissDisabled(requiresSelection || submitting)
         .onAppear { archiveBase = model.serverInfo?.archiveBase ?? ""; load("") }
         .onDisappear { loadTask?.cancel() }
         .onChange(of: connectionID) { _, _ in dismiss() }

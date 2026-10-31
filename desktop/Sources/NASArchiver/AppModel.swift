@@ -29,6 +29,7 @@ final class AppModel: ObservableObject {
 
     var selectedConnection: NASConnection? { connections.first { $0.id == selectedConnectionID } }
     var selectedJob: ArchiveJob? { jobs.first { $0.id == selectedJobID } }
+    var needsArchiveOnboarding: Bool { isConnected && jobs.isEmpty }
     var connectionLabel: String { isConnecting ? "正在連線" : (isConnected ? "已連線" : "未連線") }
 
     init(defaults: UserDefaults = .standard, session: URLSession = .shared) {
@@ -58,11 +59,12 @@ final class AppModel: ObservableObject {
                 try Task.checkCancellation()
                 guard selectedConnectionID == connection.id else { return }
                 client = api; serverInfo = info; jobs = values
-                isConnecting = false; isConnected = true
+                isConnected = true; isConnecting = false
                 startUpdates(api, connectionID: connection.id)
+                presentArchiveOnboardingIfNeeded()
             } catch is CancellationError {} catch {
                 guard !Task.isCancelled, selectedConnectionID == connection.id else { return }
-                isConnecting = false; isConnected = false; errorMessage = presentableError(error)
+                isConnected = false; errorMessage = presentableError(error); isConnecting = false
             }
         }
     }
@@ -94,6 +96,7 @@ final class AppModel: ObservableObject {
         if selectedConnectionID == connection.id {
             connectionTask?.cancel(); updatesTask?.cancel(); client = nil
             jobs = []; serverInfo = nil; selectedJobID = nil; isConnected = false; isConnecting = false; selectedConnectionID = nil
+            showNewArchive = false
             if let first = next.first { connect(first) }
         }
     }
@@ -115,12 +118,20 @@ final class AppModel: ObservableObject {
             serverInfo = info; replaceJobs(values); isConnected = true
             errorMessage = nil
             updatesMessage = isStreaming ? nil : pollingMessage
+            presentArchiveOnboardingIfNeeded()
         } catch {
             if selectedConnectionID == connectionID {
                 isConnected = false
                 errorMessage = presentableError(error)
             }
         }
+    }
+
+    func presentArchiveOnboardingIfNeeded() {
+        // A connection editor may still be finishing its dismissal transition.
+        // ContentView calls again from onDismiss, so two sheets never compete.
+        guard needsArchiveOnboarding, connectionEditor == nil, !showNewArchive else { return }
+        showNewArchive = true
     }
 
     func createJob(paths: [String], archiveBase: String, cleanup: Bool) async throws {
@@ -165,6 +176,7 @@ final class AppModel: ObservableObject {
                         guard selectedConnectionID == connectionID else { return }
                         replaceJobs(values); isConnected = true
                         updatesMessage = pollingMessage
+                        presentArchiveOnboardingIfNeeded()
                     } catch is CancellationError { return } catch {
                         guard !Task.isCancelled, selectedConnectionID == connectionID else { return }
                         isConnected = false
@@ -178,6 +190,7 @@ final class AppModel: ObservableObject {
     private func streamDidConnect(connectionID: UUID) {
         guard !Task.isCancelled, selectedConnectionID == connectionID else { return }
         isStreaming = true; isConnected = true; updatesMessage = nil
+        presentArchiveOnboardingIfNeeded()
     }
 
     private func replaceJobs(_ values: [ArchiveJob]) {

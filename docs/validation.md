@@ -34,3 +34,9 @@ The client no longer calls Keychain APIs. Server tokens are presented as connect
 First-run connection is a required sheet: no cancel action or interactive dismissal until authenticated connection and initial job retrieval succeed. Previously configured servers reconnect automatically; a failed startup connection opens the editor for correction.
 
 Connection-flow tests additionally cover wrong-password rejection, authenticated connection plus initial task loading before completion, and initial task-load failures. These checks passed. The first-run mandatory-sheet changes compile, but UI capture for that final iteration was unavailable (`cgWindowNotFound`); Escape/dismissal behavior has not been visually rechecked in that iteration.
+
+## Empty-server archive onboarding
+
+After authenticated connection and initial job loading, a server without any active or historical jobs opens the archive-folder sheet automatically. Connection-sheet dismissal is sequenced before the folder sheet. Initial folder setup has no Cancel action and disables interactive dismissal, including during a temporary network outage; submitting a valid scan job ends the step. Archive execution still requires the explicit Start action. Existing tasks skip onboarding. Fifteen Swift tests pass, including empty-server presentation, existing active/history bypass, and connection-sheet sequencing.
+
+A subsequent native UI check against the real NAS connection confirmed that successful connection transitions to the initial archive-folder sheet, the Cancel action is absent, and Escape does not dismiss it. The sheet was left with zero folders selected; no production scan/archive task was submitted during this check.
