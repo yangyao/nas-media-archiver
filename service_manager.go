@@ -727,7 +727,14 @@ func (s *archiveService) replanFailedLocked(j *ServiceJob) error {
 				if !info.Mode().IsRegular() {
 					return errors.New("source is not a regular file")
 				}
-				dt, metadata, err := detectDateTime(p, info.ModTime())
+				var dt time.Time
+				var metadata string
+				if f.MetadataSource == "manual" && info.Size() == f.Size && info.ModTime().Equal(f.MTime) {
+					dt, err = time.Parse(time.RFC3339, f.DateTime)
+					metadata = "manual"
+				} else {
+					dt, metadata, err = detectDateTime(p, info.ModTime())
+				}
 				if err != nil {
 					return err
 				}

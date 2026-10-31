@@ -63,6 +63,14 @@ struct APIClient: Sendable {
     func setSkipDuplicates(jobID: String, enabled: Bool) async throws -> ArchiveJob {
         try await fetch(ArchiveJob.self, path: "jobs/\(jobID)/skip-duplicates", method: "POST", body: JSONEncoder().encode(["enabled": enabled]))
     }
+    func contents(_ path: String) async throws -> RemoteContents {
+        try await fetch(RemoteContents.self, path: "browse", query: [.init(name: "path", value: path), .init(name: "includeFiles", value: "true")])
+    }
+    func reviewFile(jobID: String, fileID: String, dateTime: String? = nil) async throws -> ArchiveJob {
+        let action = dateTime == nil ? "acknowledge" : "date"
+        let body = try dateTime.map { try JSONEncoder().encode(["dateTime": $0]) }
+        return try await fetch(ArchiveJob.self, path: "jobs/\(jobID)/files/\(fileID)/\(action)", method: "POST", body: body)
+    }
     func files(jobID: String, filter: FileFilter, offset: Int = 0) async throws -> FilesPage {
         try await fetch(FilesPage.self, path: "jobs/\(jobID)/files", query: [.init(name: "filter", value: filter.rawValue), .init(name: "offset", value: "\(offset)"), .init(name: "limit", value: "200")])
     }

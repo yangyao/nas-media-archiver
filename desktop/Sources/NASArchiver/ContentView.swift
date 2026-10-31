@@ -35,7 +35,7 @@ struct ContentView: View {
                     JobDetailView(job: job).id(job.id)
                 } else if model.selectedConnection == nil {
                     Button("連線服務", systemImage: "link") { editConnection() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminent)
                         .controlSize(.large)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -117,9 +117,6 @@ struct JobRow: View {
                 Text(job.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
                 HStack(spacing: 5) {
                     Text(job.statusLabel)
-                    Text("·")
-                    Text("\(job.processedFiles)/\(job.supportedFiles)")
-                        .monospacedDigit()
                 }
                 .font(.system(size: 11)).foregroundStyle(.secondary)
                 if ["running", "pausing"].contains(job.status) {

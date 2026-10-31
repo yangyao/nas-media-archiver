@@ -53,10 +53,10 @@ struct ConnectionEditorView: View {
                 }
                 Spacer()
                 if model.isConnected {
-                    Button("取消") { dismiss() }.keyboardShortcut(.cancelAction).disabled(saving)
+                    Button("取消") { dismiss() }.buttonStyle(.glass).keyboardShortcut(.cancelAction).disabled(saving)
                 }
                 Button(saving ? "正在連線…" : "連線") { Task { await save() } }
-                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.glassProminent).keyboardShortcut(.defaultAction)
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || token.isEmpty || testing || saving)
             }.padding(20)
         }

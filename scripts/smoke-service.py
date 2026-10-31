@@ -183,7 +183,34 @@ def main():
                 assert duplicate.read_bytes() == fixtures[duplicate.name]
                 assert sorted(str(p) for p in archive.rglob('*') if p.is_file()) == before
                 assert job3['cleanupStatus'] == 'residual'
-                print('PASS: auth, path containment, preview, SSE, archive, SHA-256, collisions, duplicate skipping with source retention, residuals and cleanup')
+                # Read-only residual inspection includes files and housekeeping
+                # markers; the ordinary picker continues to hide those folders.
+                inspect = request('GET', '/api/v1/browse?' + urllib.parse.urlencode({'path': str(batch), 'includeFiles': 'true'}))
+                assert any(e['name'] == 'unsupported.txt' and not e['isDirectory'] for e in inspect['entries'])
+                assert any(e['name'] == '.@__thumb' and e['system'] for e in inspect['entries'])
+                rejected('GET', '/api/v1/browse?' + urllib.parse.urlencode({'path': str(sources / 'escape'), 'includeFiles': 'true'}))
+                review = sources / 'review dates'
+                review.mkdir()
+                undated = review / 'undated.jpg'
+                undated.write_bytes(fixtures['IMG_20260701_120000.jpg'])
+                job4 = request('POST', '/api/v1/jobs', {'sourcePaths': [str(review)], 'archiveBase': str(archive)})
+                path4 = '/api/v1/jobs/' + job4['id']
+                deadline = time.monotonic() + 30
+                while job4['status'] == 'scanning':
+                    assert time.monotonic() < deadline
+                    time.sleep(.05)
+                    job4 = request('GET', path4)
+                item = request('GET', path4 + '/files')['files'][0]
+                assert item['metadataSource'] == 'mtime' and item['warning']
+                item_path = path4 + '/files/' + item['id']
+                request('POST', item_path + '/date', {'dateTime': '2026-07-01T12:00:00Z'})
+                updated = request('GET', path4 + '/files')['files'][0]
+                assert updated['metadataSource'] == 'manual' and '/2026/07/' in updated['targetPath']
+                assert updated['warning'], 'Collision should remain reviewable'
+                acknowledged = request('POST', item_path + '/acknowledge')
+                assert acknowledged['attentionFiles'] == 0
+                assert undated.read_bytes() == fixtures['IMG_20260701_120000.jpg'], 'Date review changed original media'
+                print('PASS: archive safety, duplicates, residual inspection, path containment, manual date replanning and acknowledgement')
             except Exception:
                 log.flush()
                 log.seek(0)

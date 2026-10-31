@@ -2,7 +2,7 @@ package main
 
 import "time"
 
-const serviceVersion = "0.2.2"
+const serviceVersion = "0.2.3"
 
 type ServiceJob struct {
 	SkipDuplicates          bool           `json:"skipDuplicates"`
@@ -103,7 +103,7 @@ func (j *ServiceJob) applyFile(f ServiceFile, sign int) {
 	if f.Status == "failed" {
 		j.FailedFiles += sign
 	}
-	if f.Warning != "" || f.Status == "unsupported" {
+	if f.Warning != "" || f.Error != "" || f.Status == "unsupported" {
 		j.AttentionFiles += sign
 	}
 }

@@ -174,6 +174,10 @@ func (s *archiveService) route(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(endpoint, "jobs/"), "/")
+	if isServiceReviewRoute(parts) {
+		s.fileReviewEndpoint(w, r, parts)
+		return
+	}
 	if len(parts) > 2 || parts[0] == "" {
 		serviceError(w, 404, "not_found", "Endpoint not found.")
 		return
@@ -284,6 +288,10 @@ func (s *archiveService) info(w http.ResponseWriter) {
 	writeServiceJSON(w, 200, map[string]interface{}{"name": s.config.Name, "version": serviceVersion, "archiveBase": s.config.ArchiveBase, "roots": s.config.Roots, "freeBytes": free, "tools": tools, "persistence": s.store.status()})
 }
 func (s *archiveService) browse(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("includeFiles") == "true" {
+		s.inspectDirectory(w, r)
+		return
+	}
 	type entry struct {
 		Name string `json:"name"`
 		Path string `json:"path"`
@@ -335,7 +343,7 @@ func (s *archiveService) files(w http.ResponseWriter, r *http.Request, id string
 	if filter == "" {
 		filter = "all"
 	}
-	if filter != "all" && filter != "attention" && filter != "failed" {
+	if filter != "all" && filter != "attention" && filter != "failed" && filter != "skipped" {
 		serviceError(w, 400, "invalid_request", "Unknown file filter.")
 		return
 	}
@@ -366,6 +374,9 @@ func (s *archiveService) files(w http.ResponseWriter, r *http.Request, id string
 	}
 	matches := []ServiceFile{}
 	for _, f := range j.Files {
+		if filter == "skipped" && f.Status != "skipped" {
+			continue
+		}
 		if filter == "failed" && f.Status != "failed" {
 			continue
 		}

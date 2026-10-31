@@ -115,7 +115,7 @@ struct NewArchiveView: View {
                 Spacer()
                 Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button(submitting ? "正在建立…" : "掃描預覽") { Task { await create() } }
-                    .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction).buttonStyle(.glassProminent)
                     .disabled(selectedPaths.isEmpty || archiveBase.isEmpty || submitting || !model.isConnected)
             }.padding(20)
         }

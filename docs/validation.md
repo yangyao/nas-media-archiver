@@ -84,3 +84,38 @@ successfully decoded the running 0.2.2 server and enabled option.
 Final client tests: 17 passed. The 0.2.2 app bundle and ZIP are available under
 `desktop/dist` and `dist`; the real QDK installer is under `dist/qnap-0.2.2` and
 was uploaded to the NAS home installers directory.
+
+## Version 0.2.3 task UI and review
+
+The native task header groups capture-date range and source/archive paths below
+the title, keeps file/byte progress in one line, and removes redundant status,
+zero-failure and attention banners. Attention is accessed through one filter.
+Start/resume/pause and secondary actions use native macOS 26 glass button styles.
+Completed tasks expose a file/directory browser instead of only residual path
+text. The browser shows actual unsupported files and Syncthing marker contents,
+with recommendations and copy-path actions.
+
+Attention disclosures explain unsupported formats, mtime fallback, collisions
+and failures. Informational warnings can be acknowledged, pending files can have
+capture dates corrected, and failed tasks can be retried. QA did not acknowledge
+or alter the real task's seven attention records.
+
+- Go race tests and vet passed, including root containment for read-only
+  inspection, housekeeping visibility, manual-date replanning/persistence,
+  preservation across retry, and rejection of unsafe review states.
+- Swift tests: 18 passed. Real-process smoke checks passed for residual listing,
+  manual date HTTP requests, warning acknowledgement and unchanged media bytes.
+- The QNAP's existing task had naturally finished (7,707 archived, zero failed)
+  before upgrading the idle server to 0.2.3. Installed binary digest and API
+  version were verified. Actual source leftovers are four GIF files and the
+  `.stfolder` marker directory, all visible in the native browser.
+- Native UI screenshots verified the final compact header, attention filter,
+  explanatory file disclosures and actual residual/system-folder navigation.
+- Built-in image_gen created `desktop/Assets/AppIcon.png`; its exact prompt is
+  stored beside it. Packaging builds all ten ICNS renditions and registers
+  `CFBundleIconFile`. No image-generation service is needed during packaging.
+- macOS logs showed `Local network prohibited` after replacing an ad hoc build.
+  The package script now prefers an available Apple-issued signing identity;
+  `CODE_SIGN_IDENTITY` still overrides it and CI can fall back to ad hoc signing.
+  The Apple Development-signed build was successfully connected to the real NAS.
+  Apple's guidance: https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy

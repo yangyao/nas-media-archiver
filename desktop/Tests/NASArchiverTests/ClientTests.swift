@@ -49,6 +49,21 @@ final class ClientTests: XCTestCase {
         XCTAssertEqual(body["skipDuplicates"] as? Bool, true)
     }
 
+    func testAttentionExplainsNextStepsAndRemoteContentsAreVisible() throws {
+        let payload = #"{"id":"f","sourcePath":"/upload/a.jpg","targetPath":"/archive/a.jpg","size":100,"status":"planned","metadataSource":"mtime","dateTime":"2026-01-01T00:00:00Z","warning":"No capture date","error":"","sha256":""}"#
+        var file = try JSONDecoder().decode(ArchiveFile.self, from: Data(payload.utf8))
+        XCTAssertTrue(file.needsDateReview)
+        XCTAssertEqual(file.reviewTitle, "使用修改日期")
+        XCTAssertTrue(file.reviewAdvice?.contains("設定日期") == true)
+        file.warning = ""
+        XCTAssertNil(file.reviewTitle)
+        file.status = "unsupported"
+        XCTAssertTrue(file.reviewAdvice?.contains("另行保存") == true)
+        let listing = #"{"path":"/upload","parentPath":null,"entries":[{"name":".stfolder","path":"/upload/.stfolder","isDirectory":true,"size":0,"system":true,"canOpen":true,"symlink":false}]}"#
+        let contents = try JSONDecoder().decode(RemoteContents.self, from: Data(listing.utf8))
+        XCTAssertEqual(contents.entries[0].note, "系統目錄，保留即可")
+    }
+
     func testUnsupportedOnlyJobFinishesAndInterruptedScanRequiresRescan() throws {
         var job = try JSONDecoder().decode(ArchiveJob.self, from: Data(jobFixture.utf8))
         job.unsupportedFiles = job.totalFiles

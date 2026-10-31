@@ -88,3 +88,24 @@ This is candidate-based duplicate avoidance, not global content deduplication:
 archives with unrelated names or different recorded capture times/extensions can
 be missed. Equality requires reading both candidate files in full; it saves CPU
 hashing and new archive writes, not all disk reads. Preview remains metadata-only.
+
+### Inspection and review (0.2.3)
+
+- `GET /api/v1/browse?path=...&includeFiles=true` lists actual files and directories,
+  including residual Syncthing/QNAP housekeeping content. Entries include
+  `isDirectory`, `size`, `system`, `canOpen`, and `symlink`. This read-only path
+  resolves the directory within configured roots, rejects escaping symlinks,
+  and never relaxes the excluded-directory policy used by mutating operations.
+  The default directory picker remains unchanged.
+- `POST /api/v1/jobs/{job}/files/{file}/acknowledge` clears an informational warning
+  after the user reviews it. Unsupported and failed records cannot be dismissed
+  this way. File bytes and archive paths are unchanged.
+- `POST /api/v1/jobs/{job}/files/{file}/date` accepts
+  `{"dateTime":"2020-06-01T12:30:00+08:00"}` before that file is archived, while
+  the task is ready/paused/interrupted and its scan is complete. It validates
+  source path policy, size and mtime against the preview, reserves a new target,
+  and marks the metadata source as `manual`. It does not modify media contents.
+  A manual date survives retry when the source is unchanged. Completed files
+  cannot be relocated through this endpoint.
+- `filter=skipped` is accepted on the file-list endpoint. Attention counters now
+  include errors consistently with the attention filter.

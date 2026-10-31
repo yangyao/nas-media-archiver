@@ -169,6 +169,16 @@ final class AppModel: ObservableObject {
         } catch { if connectionID == selectedConnectionID { errorMessage = presentableError(error) } }
     }
 
+    func reviewFile(_ file: ArchiveFile, job: ArchiveJob, dateTime: String? = nil) async throws {
+        guard !isPerformingAction else { throw ServiceError(message: "請等待目前操作完成。") }
+        isPerformingAction = true
+        let connectionID = selectedConnectionID
+        defer { isPerformingAction = false }
+        let updated = try await api().reviewFile(jobID: job.id, fileID: file.id, dateTime: dateTime)
+        guard connectionID == selectedConnectionID else { return }
+        upsert(updated)
+    }
+
     private func startUpdates(_ api: APIClient, connectionID: UUID) {
         updatesTask = Task {
             while !Task.isCancelled && selectedConnectionID == connectionID {
