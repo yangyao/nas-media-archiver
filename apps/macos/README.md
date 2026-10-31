@@ -1,35 +1,67 @@
-# NAS Archiver for macOS
+# NAS Archiver macOS 客户端
 
-Native SwiftUI client for the QNAP archiver service. Requires macOS 26 or newer and Xcode 26+ / Swift 6. Uses the native split-view toolbar and Liquid Glass controls; no web view or frontend runtime.
+面向归档服务的原生 SwiftUI 客户端，需要 macOS 26+、Xcode 26+ 和 Swift 6。使用原生分栏、工具栏和 Liquid Glass 控件。
+
+## 构建与安装
+
+在仓库根目录运行：
+
+```sh
+make test-macos
+make macos
+open apps/macos/dist/NASArchiver.app
+```
+
+也可以直接运行：
 
 ```sh
 swift test --package-path apps/macos
 apps/macos/scripts/package-macos.sh
-open apps/macos/dist/NASArchiver.app
 ```
 
-Copy the resulting `NASArchiver.app` to `/Applications` to install. Packaging prefers an available Apple-issued signing identity, with ad-hoc signing as a CI fallback. Set `CODE_SIGN_IDENTITY` to choose a specific identity for distribution; notarization is a separate release step. The default build targets the host architecture.
+将生成的 `NASArchiver.app` 复制到 `/Applications` 即可安装。打包优先使用本机可用的 Apple 签名身份，没有时回退到临时签名。可用 `CODE_SIGN_IDENTITY` 指定分发签名身份；公证需要另行完成。默认构建当前主机架构。
 
-## First connection
+## 连接服务
 
-The client connects to the **archive server**, not to a NAS appliance, QTS, or SSH. The server can run on a QNAP NAS; its host device is distinct from the saved service connection.
+客户端连接的是归档服务，不是 NAS 的 QTS 管理界面或 SSH。服务可以安装在 QNAP 上，也可以运行于 Linux 主机。
 
-1. Start/install the QNAP service and obtain its generated bearer token through your SSH/admin connection.
-2. On first launch the connection window opens automatically. It stays open until the service connection succeeds; there is no Cancel action. Later launches reconnect using the saved address/password. If automatic startup connection fails, the connection window reopens for correction.
-3. Enter the archive-service URL (for example `http://192.168.2.196:8787`, not the QTS admin URL), and the server token in **連線密碼**.
-4. Click **連線**. The window closes only after authentication and the initial task load succeed. The password is saved in the app's local credentials directory; the address is in UserDefaults. The app never accesses Keychain.
-5. If the server has no tasks, **新增歸檔** opens automatically after the connection window finishes closing (or immediately after automatic reconnection). The window can always be canceled or dismissed with Escape, including when the service is unreachable. Automatic onboarding is offered once per server per app session, so canceling it does not cause polling, refresh or reconnection to reopen it. To continue, select one or more server-side folders and submit **掃描預覽**. The scan task then appears in the main window; starting the actual archive remains a separate action. If any active or historical tasks already exist, onboarding is skipped and future archive dialogs can be canceled. The folder picker browses through the service API, never the Mac's local filesystem.
+1. 安装并启动服务，取得服务端生成的 Token。
+2. 首次启动时会打开连接窗口，填写服务地址和连接密码（Token）。
+3. 连接窗口在身份验证及初始任务加载成功后关闭。后续启动会使用已保存的配置连接；连接失败时可重新填写。
+4. 地址示例为 `http://192.168.2.196:8787`，应使用归档服务端口。
 
-Tasks continue on the NAS when this app closes. Real-time updates use authenticated SSE. If streaming fails, an explicit banner explains polling/reconnection; jobs refresh every three seconds during fallback. The app provides file filtering/pagination, pause/resume, failure retry, residual-folder information, and empty-directory cleanup. Client appearance/notification preferences live in native Settings (`⌘,`). The app presents one archive server; its connection settings and a quiet status indicator live at the bottom of the task sidebar. The two-column window groups active and historical jobs directly in one compact sidebar, with selected-job details on the right.
+服务地址保存在 UserDefaults，Token 保存在当前用户的应用数据目录中，不会调用钥匙串读取或保存连接密码。
 
-## Transport and permissions
+## 归档流程
 
-The app explicitly supports the service's private-LAN HTTP endpoint, including numeric IP addresses. Its bundle declares `NSAllowsArbitraryLoads` and `NSAllowsLocalNetworking`, plus a local-network usage description. HTTP carries the bearer token without transport encryption; use an HTTPS endpoint or a trusted private network. URLs containing embedded credentials or query-string tokens are rejected. The app has no local file access requirement. Notification permission is requested only when completion notifications are enabled in Settings.
+连接成功且服务没有任何任务时，会自动打开新增归档窗口。这个窗口可以取消，也可以通过 Escape 关闭；取消后不会因刷新或重连反复弹出。以后可通过工具栏或 `⌘N` 新建任务。
 
-Do not embed tokens in this repository or a signed application bundle. There are no default connections, tokens, or demo jobs.
+目录选择器浏览的是服务端目录。选择目录后先扫描预览，开始实际归档是独立操作。空任务显示“等待文件”和“重新扫描”；尚未开始的非空预览也能重新扫描。已开始或完成的任务保留历史，后续文件应建立新任务。
 
-## Local connection password
+同名任务使用独立的 `#1`、`#2` 标记区分，副信息显示文件数量与状态，创建时间放在鼠标提示中。运行中可查看进度、暂停和继续；完成后可浏览实际残留内容并清理空目录。
 
-The server token remains the HTTP bearer credential; **連線密碼** is its user-facing label, not a Mac login password or a QTS account password. It is saved as plain text under `~/Library/Application Support/NASArchiver/credentials/<connection-id>.token`, in a directory with mode `0700` and a file with mode `0600`. Writes are atomic. This path is stable across local development builds and signing changes. Removing a saved connection removes its local token file.
+“需要关注”筛选列出日期回退、文件名冲突、不支持的格式及错误，并提供原因和处理建议。信息性提示可以确认；尚未归档的文件可以手动设定日期；失败的任务可以重试。
 
-Previously saved Keychain entries are not read, migrated automatically, or deleted, so upgrading cannot trigger a Keychain authorization prompt. An existing connection needs its server token entered once in the new local store. Credentials are not stored in UserDefaults, build output, source code, or logs.
+关闭客户端不会停止服务端任务。实时进度通过带身份验证的 SSE 连接获取，断线时自动重连，并每三秒轮询更新任务。外观和完成通知位于原生设置窗口（`⌘,`）。
+
+## 重复文件
+
+默认启用“跳过重复文件”。服务端先按拍摄时间、大小和扩展名查找候选，再逐字节确认内容；完全相同时保留来源、不再复制。不同内容会使用后缀另存。详情页中可在开始前或暂停时调整该选项。
+
+## 连接密码保存
+
+Token 是归档服务的 API 凭证，不是 Mac 登录密码或 QTS 账号密码。客户端以明文将其保存到：
+
+```text
+~/Library/Application Support/NASArchiver/credentials/<connection-id>.token
+```
+
+目录权限为 `0700`，文件权限为 `0600`，使用原子写入。路径不随开发构建或签名变化，移除连接时会删除对应凭证文件。
+
+旧版钥匙串条目不会被读取、自动迁移或删除。升级后如本地凭证尚不存在，需要重新输入一次服务端 Token。凭证不会写入源码、构建产物、UserDefaults 或日志。
+
+## 网络与权限
+
+客户端支持局域网 HTTP 地址，包括数字 IP；应用声明了本地网络用途说明和相应 ATS 配置。HTTP 不提供传输加密，请使用可信局域网或 HTTPS 服务地址。客户端拒绝包含嵌入式账号密码或查询参数 Token 的地址。
+
+macOS 可能要求允许本地网络访问。使用稳定的 Apple 签名身份有助于系统在更新后识别应用。只有启用完成通知时才会请求通知权限。
