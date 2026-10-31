@@ -3,7 +3,6 @@ import SwiftUI
 struct NewArchiveView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    var requiresSelection = false
     @State private var listing: DirectoryListing?
     @State private var path = ""
     @State private var selectedPaths: Set<String> = []
@@ -111,16 +110,13 @@ struct NewArchiveView: View {
             HStack {
                 Label("掃描不會移動檔案", systemImage: "checkmark.shield").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                if !requiresSelection {
-                    Button("取消") { dismiss() }.keyboardShortcut(.cancelAction).disabled(submitting)
-                }
+                Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button(submitting ? "正在建立…" : "掃描預覽") { Task { await create() } }
                     .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
                     .disabled(selectedPaths.isEmpty || archiveBase.isEmpty || submitting || !model.isConnected)
             }.padding(20)
         }
         .frame(width: 920, height: 650)
-        .interactiveDismissDisabled(requiresSelection || submitting)
         .onAppear { archiveBase = model.serverInfo?.archiveBase ?? ""; load("") }
         .onDisappear { loadTask?.cancel() }
         .onChange(of: connectionID) { _, _ in dismiss() }

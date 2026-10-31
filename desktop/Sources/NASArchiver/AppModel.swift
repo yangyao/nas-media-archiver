@@ -26,6 +26,7 @@ final class AppModel: ObservableObject {
     private var isStreaming = false
     private let pollingMessage = "即時連線正在重連，每 3 秒更新任務。"
     private var selectedJobForConnection: [UUID: String] = [:]
+    private var offeredArchiveOnboarding: Set<UUID> = []
 
     var selectedConnection: NASConnection? { connections.first { $0.id == selectedConnectionID } }
     var selectedJob: ArchiveJob? { jobs.first { $0.id == selectedJobID } }
@@ -102,7 +103,7 @@ final class AppModel: ObservableObject {
     }
 
     func api() throws -> APIClient {
-        guard let client, isConnected else { throw ServiceError(message: "請先連線服務端。") }
+        guard let client else { throw ServiceError(message: "請先連線服務端。") }
         return client
     }
 
@@ -130,7 +131,9 @@ final class AppModel: ObservableObject {
     func presentArchiveOnboardingIfNeeded() {
         // A connection editor may still be finishing its dismissal transition.
         // ContentView calls again from onDismiss, so two sheets never compete.
-        guard needsArchiveOnboarding, connectionEditor == nil, !showNewArchive else { return }
+        guard needsArchiveOnboarding, connectionEditor == nil, !showNewArchive,
+              let id = selectedConnectionID, !offeredArchiveOnboarding.contains(id) else { return }
+        offeredArchiveOnboarding.insert(id)
         showNewArchive = true
     }
 
@@ -166,7 +169,9 @@ final class AppModel: ObservableObject {
                     }
                 } catch is CancellationError { return } catch {
                     guard !Task.isCancelled, selectedConnectionID == connectionID else { return }
-                    isStreaming = false; isConnected = false
+                    // Losing SSE does not invalidate the authenticated HTTP client.
+                    // The fallback poll determines whether the server is reachable.
+                    isStreaming = false
                     updatesMessage = "即時連線暫時中斷，正在重新連線。\n\(presentableError(error))"
                 }
                 for _ in 0..<5 {

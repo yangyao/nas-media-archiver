@@ -55,8 +55,8 @@ struct ContentView: View {
         .sheet(item: $model.connectionEditor, onDismiss: model.presentArchiveOnboardingIfNeeded) { target in
             ConnectionEditorView(connection: target.connection).environmentObject(model)
         }
-        .sheet(isPresented: $model.showNewArchive, onDismiss: model.presentArchiveOnboardingIfNeeded) {
-            NewArchiveView(requiresSelection: model.jobs.isEmpty).environmentObject(model)
+        .sheet(isPresented: $model.showNewArchive) {
+            NewArchiveView().environmentObject(model)
         }
         .onAppear {
             if !model.isConnected && !model.isConnecting {

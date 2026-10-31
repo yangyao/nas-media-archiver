@@ -35,7 +35,7 @@ final class ConnectionFlowTests: XCTestCase {
         try await assertConnectionFailure(token: "failing-jobs-test-token", expected: "Tasks unavailable")
     }
 
-    func testArchiveOnboardingWaitsUntilConnectionSheetIsDismissed() async throws {
+    func testArchiveOnboardingWaitsForConnectionDismissalAndDoesNotReopenAfterCancel() async throws {
         let suite = "connection-flow-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         let config = URLSessionConfiguration.ephemeral
@@ -57,6 +57,34 @@ final class ConnectionFlowTests: XCTestCase {
         XCTAssertTrue(model.showNewArchive)
         model.presentArchiveOnboardingIfNeeded()
         XCTAssertTrue(model.showNewArchive)
+        model.showNewArchive = false // User cancels the initial folder picker.
+        model.presentArchiveOnboardingIfNeeded()
+        XCTAssertFalse(model.showNewArchive)
+        await model.refresh()
+        XCTAssertFalse(model.showNewArchive, "Refreshing an empty server must not undo cancellation")
+        try await model.saveConnection(connection, token: "valid-connection-test-token")
+        XCTAssertFalse(model.showNewArchive, "Reconnection must not trap the user in the canceled sheet")
+    }
+
+    func testCachedDisconnectionDoesNotBlockAnEstablishedHTTPClient() async throws {
+        let suite = "connection-flow-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ConnectionFlowProtocol.self]
+        let session = URLSession(configuration: config)
+        let model = AppModel(defaults: defaults, session: session)
+        let connection = NASConnection(name: "Test service", address: "http://test-service:8787")
+        defer {
+            try? model.removeConnection(connection)
+            defaults.removePersistentDomain(forName: suite)
+            session.invalidateAndCancel()
+        }
+        XCTAssertThrowsError(try model.api())
+        try await model.saveConnection(connection, token: "valid-connection-test-token")
+        model.isConnected = false // A previous poll failed; the server may now be back.
+        let api = try model.api()
+        let info = try await api.info()
+        XCTAssertEqual(info.name, "Test service")
     }
 
     func testExistingActiveOrHistoricalTasksSkipArchiveOnboarding() async throws {
