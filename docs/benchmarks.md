@@ -97,3 +97,69 @@ For a similar ARM NAS setup, start with:
 Then tune only if your workload differs materially, especially if your video
 ratio is much higher than your image ratio.
 
+
+## Service 0.2.1: fixed-cadence checkpoints and persistent metadata readers
+
+Validated on the same four-core ARM64 QNAP on 2026-10-31. The original
+service scan was stopped after approximately 44 minutes with 6,440 discovered
+records, before completing. Its database and binary were backed up before the
+upgrade.
+
+The real source directory contains 7,712 files including a Syncthing marker in
+`.stfolder`; the preview correctly contains 7,711 files after exclusions:
+7,707 planned media files and four unsupported files. These measurements only
+scan and plan; they do not transfer or delete media.
+
+| Run | Observed wall time |
+| --- | ---: |
+| Resume using metadata from the previous partial checkpoint | approximately 27 seconds |
+| Full scan with a separate, initially empty service state directory | 83.5 seconds |
+
+The full scan had no application metadata cache. It could benefit from the OS
+filesystem cache populated by earlier scans; this is not a cold-disk benchmark.
+Polling adds up to roughly five seconds to the full-run observation. Do not
+extrapolate these numbers to other media formats, devices or archive transfers.
+
+Full-scan metadata sources: native JPEG EXIF 5,002; persistent ExifTool 2,377;
+ffprobe 306; filename 19; mtime fallback three; unsupported four. There were zero
+failed files. Every planned target was unique. All file SHA fields remained
+empty and completed-file counts remained zero, confirming no archive transfer
+was performed.
+
+SQLite flushes ran every two seconds with a 500-record transaction limit. Sampled
+commits took 84–574 ms, with no write errors; the initial backlog drained while
+metadata processing continued. Both the resumed preview and full preview matched
+for source path, size, mtime, capture date, metadata source, target path and status.
+Restarting the isolated validation service loaded all 7,711 records as ready.
+The isolated service was then stopped; the production task remains ready.
+
+A local arm64 microbenchmark of statistics updates (one pass of discoveries,
+without metadata or SQL) compared the original full-list recalculation with the
+new incremental update:
+
+| Records | Original recalculation | Incremental |
+| --- | ---: | ---: |
+| 1,000 | 17.8 ms | 0.27 ms |
+| 8,000 | 1,141 ms | 2.90 ms |
+
+Run `go test -run '^$' -bench BenchmarkServiceScanState -benchtime=1x -benchmem`.
+These are single-iteration diagnostics of the statistics algorithm, not an
+end-to-end NAS speedup claim. Incremental bookkeeping uses additional memory.
+
+### Durability contract
+
+Live progress is authoritative in memory. One writer coalesces dirty records,
+then commits at most 500 records each two-second tick. A backlog or failed flush
+can lose more than one tick of progress on an abrupt crash. Normal shutdown
+waits for workers and drains capped batches; flush errors are returned. Runtime
+never launches overlapping writes or bypasses the timer because a threshold was
+reached. Authenticated `/api/v1/info` exposes pending records, errors and recent
+flush timings.
+
+Checkpoint freshness does not authorize source deletion. The transfer path still
+syncs and verifies destination data, publishes without overwriting, syncs the
+destination directory, then verifies source contents and identity before removal.
+A stale checkpoint may require a rescan, leave a staging file or produce an
+additional archive copy. Version 0.2.1 had no content deduplication. Version 0.2.2 adds optional candidate-based byte comparison with source retention (see `service-api.md`). Retrying
+an incomplete scan reuses saved capture metadata only for unchanged size/mtime
+and assigns destination paths again against the current filesystem.

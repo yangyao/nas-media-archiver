@@ -18,7 +18,7 @@ Implementation contract for the native macOS client and QNAP service. JSON uses 
 
 ## Info
 
-`{"name":"My QNAP","version":"0.2.0","archiveBase":"/share/archive","roots":["/share/ssd/upload","/share/archive"],"freeBytes":12345,"tools":{"exiftool":true,"ffprobe":false,"ffmpeg":true}}`
+`{"name":"My QNAP","version":"0.2.2","archiveBase":"/share/archive","roots":["/share/ssd/upload","/share/archive"],"freeBytes":12345,"tools":{"exiftool":true,"ffprobe":false,"ffmpeg":true}}`
 
 ## DirectoryListing
 
@@ -45,7 +45,7 @@ Fields (always emit zero values/empty arrays where relevant):
 
 `{"id":"file-000001","sourcePath":"...","targetPath":"...","size":123,"status":"planned","metadataSource":"native-exif","dateTime":"2026-07-01T12:00:00Z","warning":"","error":"","sha256":""}`
 
-Status: `discovered`, `planned`, `copying`, `completed`, `failed`, `unsupported`. Metadata source: `filename`, `native-exif`, `exiftool`, `ffprobe`, `mtime` (or empty before metadata extraction). `warning` explains fallback or renamed collisions. Never overwrite existing files; preserve duplicates with suffixes. SHA-256 journal must be durable before source deletion, and recovery must verify destination contents before treating a missing source as completed. Exclude `.@__thumb`, `@eaDir`, `@Recycle`, `.stfolder`, `.stversions`.
+Status: `discovered`, `planned`, `checking`, `copying`, `completed`, `skipped`, `failed`, `unsupported`. Metadata source: `filename`, `native-exif`, `exiftool`, `ffprobe`, `mtime` (or empty before metadata extraction). `warning` explains fallback or renamed collisions. Never overwrite existing files; use suffixes for distinct content, or for all collisions when duplicate avoidance is disabled. Live state is in memory and is checkpointed asynchronously every two seconds, at most 500 records per transaction by a single writer. Repeated updates coalesce. A crash can lose unflushed progress (and more than two seconds when a backlog exists). File safety is independent of checkpoint freshness: sync and SHA-256 verify the destination, verify the source immediately before removal, and never overwrite a destination. Recovery must verify destination contents before treating a missing source as completed; an incomplete checkpoint can require a rescan and may leave duplicates or staging files. Exclude `.@__thumb`, `@eaDir`, `@Recycle`, `.stfolder`, `.stversions`.
 
 ## Lifecycle and packaging
 
@@ -53,4 +53,38 @@ Status: `discovered`, `planned`, `copying`, `completed`, `failed`, `unsupported`
 
 No default credentials. Generate a random token if the supplied token file is absent; mode 0600. Default loopback listen; QPKG explicitly configures LAN binding with bearer auth. Minimal setup/status Web page at `/`, no unauthenticated filesystem/credential disclosure. GET `/healthz` returns `{"status":"ok"}`.
 
-Existing CLI commands must keep working. State uses SQLite (pure Go driver compatible with the toolchain), stored outside installed binaries so upgrades preserve state. On restart, interrupted scanning/moving jobs recover to a safe paused/interrupted state, never silently discard state. Shutdown pauses at safe file boundaries.
+Existing CLI commands must keep working. State uses SQLite (pure Go driver compatible with the toolchain), stored outside installed binaries so upgrades preserve state. On restart, interrupted scanning/moving jobs recover to a safe paused/interrupted state, retry reuses saved capture metadata only when source size and modification time are unchanged, and replans destination names. Shutdown pauses at safe file boundaries and drains pending checkpoints; a final write failure is returned. Normal runtime never bypasses the fixed writer cadence.
+
+### Persistence diagnostics (0.2.1)
+
+Authenticated `GET /api/v1/info` also includes `persistence`: `pendingRecords`, `flushIntervalSeconds`, `batchLimit`, `lastFlush`, `lastBatchRecords`, `lastFlushMilliseconds`, and `error`. A failed batch is retained, subsequent changes supersede stale versions, and the next tick retries. Progress reads and SSE use memory; they do not wait for SQLite I/O. Job summaries follow their pending file records, while an initial job record permits partial scans to be loaded. Shutdown may drain multiple capped transactions without waiting for ticks.
+
+Metadata parsing uses a service-wide pool of four readers with lazy persistent ExifTool processes. External tool requests have a 30-second timeout per invocation; video fallback can try multiple tools. Destination suffixes are assigned in discovery order.
+
+### Duplicate handling (0.2.2)
+
+`POST /api/v1/jobs` accepts `skipDuplicates` (default false for API compatibility).
+The Mac client defaults it to true. Existing ready/paused/interrupted tasks can
+set it with `POST /api/v1/jobs/{id}/skip-duplicates`, body `{"enabled":true}`.
+Changes during an active transfer are rejected.
+
+When enabled, only archive files named with the same capture timestamp, size and
+extension (including suffixed variants) are candidates. Destination directories
+are indexed lazily once per run; files archived earlier in the same run are added
+to that index. Candidates must have equal size and byte-for-byte equal contents;
+comparison stops on the first difference and never computes a full-library hash.
+Source identity, size and mtime are checked against the preview and again after
+comparison; target identity/size/mtime are also checked. Symlinks are not accepted
+as matching archive files. Different or absent candidates follow the existing
+verified-copy and suffix-preserving transfer path.
+
+A confirmed duplicate has status `skipped` and `duplicateOf` naming the existing
+archive file. **The source is retained.** Job summaries expose `skippedFiles` and
+`skippedBytes` separately from actual archived counts. Progress includes both.
+Retry/resume skips already skipped records. Disabling the option does not revisit
+records already skipped; a new task can process retained source files.
+
+This is candidate-based duplicate avoidance, not global content deduplication:
+archives with unrelated names or different recorded capture times/extensions can
+be missed. Equality requires reading both candidate files in full; it saves CPU
+hashing and new archive writes, not all disk reads. Preview remains metadata-only.

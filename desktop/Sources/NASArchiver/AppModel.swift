@@ -137,10 +137,10 @@ final class AppModel: ObservableObject {
         showNewArchive = true
     }
 
-    func createJob(paths: [String], archiveBase: String, cleanup: Bool) async throws {
+    func createJob(paths: [String], archiveBase: String, cleanup: Bool, skipDuplicates: Bool = true) async throws {
         let api = try api()
         let connectionID = selectedConnectionID
-        let job = try await api.create(.init(sourcePaths: paths.sorted(), archiveBase: archiveBase, cleanupEmptyDirectories: cleanup))
+        let job = try await api.create(.init(sourcePaths: paths.sorted(), archiveBase: archiveBase, cleanupEmptyDirectories: cleanup, skipDuplicates: skipDuplicates))
         guard connectionID == selectedConnectionID else { return }
         upsert(job); selectedJobID = job.id
     }
@@ -154,6 +154,18 @@ final class AppModel: ObservableObject {
             let job = try await api().action(action, jobID: job.id)
             guard connectionID == selectedConnectionID else { return }
             upsert(job)
+        } catch { if connectionID == selectedConnectionID { errorMessage = presentableError(error) } }
+    }
+
+    func setSkipDuplicates(_ enabled: Bool, job: ArchiveJob) async {
+        guard !isPerformingAction else { return }
+        isPerformingAction = true
+        let connectionID = selectedConnectionID
+        defer { isPerformingAction = false }
+        do {
+            let updated = try await api().setSkipDuplicates(jobID: job.id, enabled: enabled)
+            guard connectionID == selectedConnectionID else { return }
+            upsert(updated)
         } catch { if connectionID == selectedConnectionID { errorMessage = presentableError(error) } }
     }
 
@@ -215,7 +227,7 @@ final class AppModel: ObservableObject {
               !previous.isTerminal, job.isTerminal else { return }
         let content = UNMutableNotificationContent()
         content.title = job.failedFiles == 0 ? "歸檔完成" : "歸檔完成，有檔案需要關注"
-        content.body = "\(job.name)：\(job.completedFiles) 個檔案已歸檔。"
+        content.body = "\(job.name)：已歸檔 \(job.completedFiles)，略過重複 \(job.skippedFiles ?? 0)。"
         let request = UNNotificationRequest(identifier: job.id, content: content, trigger: nil)
         Task { try? await UNUserNotificationCenter.current().add(request) }
     }

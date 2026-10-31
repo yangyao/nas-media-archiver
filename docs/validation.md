@@ -42,3 +42,45 @@ After authenticated connection and initial job loading, a server without any act
 The connection-to-folder transition was checked against the real NAS without submitting a production scan/archive task. The cancellation regression test now additionally covers refresh and reconnection after canceling the folder picker.
 
 The dismissible-folder update was checked in the native app against the real NAS: Cancel returned to the main window, the footer opened connection settings, closing those settings did not reopen onboarding, and Escape closed a manually opened archive sheet. No source directory was selected and no archive job was created. The suite also checks that a cached disconnected indicator does not block a valid authenticated HTTP client; SSE interruption alone no longer marks the service unavailable.
+
+## Service 0.2.1 optimization
+
+- `go test -race ./...`: passed, including fixed-tick batch limits, coalescing,
+  failed-flush retries/reset ordering, incremental counters, persistent ExifTool,
+  partial-scan metadata reuse, source-change invalidation and stale-checkpoint
+  recovery after source removal.
+- `go vet ./...`, real-process smoke test and QNAP packaging checks: passed.
+- Linux ARM64 build and real QDK package: version 0.2.1.
+- Real QNAP full scan: 7,711 included files in approximately 84 seconds, zero
+  failures. No media were moved or deleted. See `benchmarks.md` for methodology,
+  cache caveats and durability semantics.
+- The previous incomplete preview was recovered using saved metadata; its final
+  records match a complete scan using an empty state directory. Both database
+  reload and preview consistency were verified.
+- QDK on this firmware returned installer exit 10 despite completing the
+  upgrade. Registry version, running API version and installed binary digest
+  were checked independently before accepting the upgrade.
+
+## Version 0.2.2 duplicate avoidance
+
+The native client offers “略過重複檔案” during creation and on ready/paused task
+previews. Identical content is skipped with the source retained, as requested.
+Tests cover identical base names, identical suffixed candidates, same-size but
+different contents, disabled behavior, duplicates created earlier in the same
+job, changed sources, symlinks and option updates at safe boundaries. Swift tests
+verify that skipped files complete progress without inflating archived counts,
+and that older responses without skip fields still decode.
+
+Deployed 0.2.2 on the real QNAP, verified the installed binary digest against the
+local Linux ARM64 build, and enabled duplicate skipping on the existing ready
+7,711-file task. A disposable test used a hard link to a real 61,422-byte JPEG as
+its source and an isolated archive copy as its candidate: exactly one file was
+skipped, zero files archived, the source remained, and the original file's
+inode/size/mtime were unchanged. The disposable source/archive directories were
+removed and the isolated service stopped. The actual 7,711-file task was not
+started. A native URLSession/APIClient probe using saved local credentials also
+successfully decoded the running 0.2.2 server and enabled option.
+
+Final client tests: 17 passed. The 0.2.2 app bundle and ZIP are available under
+`desktop/dist` and `dist`; the real QDK installer is under `dist/qnap-0.2.2` and
+was uploaded to the NAS home installers directory.

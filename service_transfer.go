@@ -45,8 +45,10 @@ func (s *archiveService) transferProgress(j *ServiceJob, n int64) {
 	s.mu.Unlock()
 }
 
-// A verified hash and exact destination are committed to SQLite before publish or
-// source removal. A hard link publishes the destination without overwriting it.
+// Progress journals are checkpointed asynchronously. Safety does not depend on
+// checkpoint freshness: publish without overwrite, sync and verify destination,
+// then verify the current source before deletion. A crash can require a rescan
+// or leave a duplicate/staging file, but never authorizes unchecked deletion.
 func (s *archiveService) archiveFile(j *ServiceJob, shared *ServiceFile) error {
 	s.mu.Lock()
 	local := *shared

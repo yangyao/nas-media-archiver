@@ -34,6 +34,21 @@ final class ClientTests: XCTestCase {
         XCTAssertTrue(job.isTerminal)
     }
 
+    func testSkippedDuplicatesCountTowardProgressWithoutClaimingTheyWereArchived() throws {
+        var job = try JSONDecoder().decode(ArchiveJob.self, from: Data(jobFixture.utf8))
+        XCTAssertNil(job.skippedFiles) // Compatible with older service responses.
+        job.currentFileBytes = 0
+        job.skippedFiles = 1
+        job.skippedBytes = 500
+        job.skipDuplicates = true
+        XCTAssertEqual(job.processedFiles, 2)
+        XCTAssertEqual(job.progress, 1)
+        XCTAssertEqual(job.completedFiles, 1)
+        let request = CreateJobRequest(sourcePaths: ["/input"], archiveBase: "/archive", cleanupEmptyDirectories: true, skipDuplicates: true)
+        let body = try JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as! [String: Any]
+        XCTAssertEqual(body["skipDuplicates"] as? Bool, true)
+    }
+
     func testUnsupportedOnlyJobFinishesAndInterruptedScanRequiresRescan() throws {
         var job = try JSONDecoder().decode(ArchiveJob.self, from: Data(jobFixture.utf8))
         job.unsupportedFiles = job.totalFiles

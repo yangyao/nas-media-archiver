@@ -2,7 +2,7 @@
 
 ## First release
 
-A QNAP-resident service owns all media IO and durable task state. The macOS 26+ SwiftUI application is a remote controller. Quitting the Mac app never terminates an archive task. The existing CLI remains available.
+A QNAP-resident service owns all media IO and periodically checkpointed task state. The macOS 26+ SwiftUI application is a remote controller. Quitting the Mac app never terminates an archive task. The existing CLI remains available.
 
 The Mac window uses two columns, with active and historical jobs grouped directly in one native sidebar. It borrows OrbStack's compact list hierarchy and quiet controls without reproducing its additional navigation column. The app presents a single archive server; connection status/settings are a small footer at the bottom left. Global client preferences live in the native Settings window. The client connects to the archive service HTTP endpoint, not QTS or SSH. Source browsing operates on the service's filesystem.
 
@@ -11,7 +11,7 @@ First-run flow: authenticated connection -> if the server has no tasks, a dismis
 ## Boundaries
 
 - `archive.go`: existing CLI and metadata/file helpers.
-- `server*.go` / `service*.go`: authenticated API, SQLite job store, worker queue, durable copy journal and SSE.
+- `server*.go` / `service*.go`: authenticated API, SQLite job store, worker queue, asynchronous progress checkpoints, verified copy pipeline and SSE.
 - `desktop/`: Swift package, native views, URLSession API, app-local connection passwords and macOS app packaging.
 - `packaging/qnap/`: QDK configuration and QPKG service lifecycle.
 - `docs/service-api.md`: shared API contract.

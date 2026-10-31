@@ -913,7 +913,8 @@ func extractJPEGExif(path string) (time.Time, error) {
 }
 
 func extractWithExiftool(path string) (time.Time, error) {
-	cmd := exec.Command("/opt/bin/exiftool", "-s3", "-DateTimeOriginal", "-CreateDate", path)
+	cmd, cancel := metadataCommand("/opt/bin/exiftool", "-s3", "-DateTimeOriginal", "-CreateDate", path)
+	defer cancel()
 	out, err := cmd.Output()
 	if err != nil {
 		return time.Time{}, err
@@ -936,12 +937,14 @@ func extractWithFFProbe(path string) (time.Time, error) {
 			continue
 		}
 		var cmd *exec.Cmd
+		var cancel context.CancelFunc
 		if strings.Contains(filepath.Base(bin), "ffprobe") {
-			cmd = exec.Command(bin, "-v", "quiet", "-show_entries", "format_tags=creation_time", "-of", "default=nw=1:nk=1", path)
+			cmd, cancel = metadataCommand(bin, "-v", "quiet", "-show_entries", "format_tags=creation_time", "-of", "default=nw=1:nk=1", path)
 		} else {
-			cmd = exec.Command(bin, "-i", path)
+			cmd, cancel = metadataCommand(bin, "-i", path)
 		}
 		out, err := cmd.CombinedOutput()
+		cancel()
 		if err != nil && len(out) == 0 {
 			continue
 		}

@@ -8,6 +8,7 @@ struct NewArchiveView: View {
     @State private var selectedPaths: Set<String> = []
     @State private var archiveBase = ""
     @State private var cleanup = true
+    @State private var skipDuplicates = true
     @State private var loading = false
     @State private var submitting = false
     @State private var error: String?
@@ -100,6 +101,8 @@ struct NewArchiveView: View {
                         Label("PNG → pngs / 年 / 月", systemImage: "photo.on.rectangle")
                         Label("影片 → videos / 年 / 月", systemImage: "film")
                     }.font(.caption).foregroundStyle(.secondary)
+                    Toggle("略過重複檔案", isOn: $skipDuplicates).font(.callout)
+                    Text("內容相同時保留來源，不再複製。").font(.caption).foregroundStyle(.secondary)
                     Toggle("完成後清理空目錄", isOn: $cleanup).font(.callout)
                     Text("只移除空目錄；不支援或失敗的檔案會保留。")
                         .font(.caption).foregroundStyle(.secondary)
@@ -141,7 +144,7 @@ struct NewArchiveView: View {
     private func create() async {
         submitting = true; error = nil
         defer { submitting = false }
-        do { try await model.createJob(paths: Array(selectedPaths), archiveBase: archiveBase, cleanup: cleanup); dismiss() }
+        do { try await model.createJob(paths: Array(selectedPaths), archiveBase: archiveBase, cleanup: cleanup, skipDuplicates: skipDuplicates); dismiss() }
         catch { self.error = presentableError(error) }
     }
 }

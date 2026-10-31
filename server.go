@@ -145,6 +145,7 @@ func (s *archiveService) route(w http.ResponseWriter, r *http.Request) {
 				SourcePaths             []string `json:"sourcePaths"`
 				ArchiveBase             string   `json:"archiveBase"`
 				CleanupEmptyDirectories bool     `json:"cleanupEmptyDirectories"`
+				SkipDuplicates          bool     `json:"skipDuplicates"`
 			}
 			decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024*1024))
 			decoder.DisallowUnknownFields()
@@ -157,7 +158,7 @@ func (s *archiveService) route(w http.ResponseWriter, r *http.Request) {
 				serviceError(w, 400, "invalid_request", "Provide one JSON object.")
 				return
 			}
-			j, err := s.createJob(input.SourcePaths, input.ArchiveBase, input.CleanupEmptyDirectories)
+			j, err := s.createJobWithOptions(input.SourcePaths, input.ArchiveBase, input.CleanupEmptyDirectories, input.SkipDuplicates)
 			if err != nil {
 				serviceError(w, 400, "invalid_request", err.Error())
 				return
@@ -207,6 +208,33 @@ func (s *archiveService) route(w http.ResponseWriter, r *http.Request) {
 		serviceError(w, 405, "method_not_allowed", "Use POST.")
 		return
 	}
+	if parts[1] == "skip-duplicates" {
+		var input struct {
+			Enabled *bool `json:"enabled"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil || input.Enabled == nil {
+			serviceError(w, 400, "invalid_request", "Provide enabled: true or false.")
+			return
+		}
+		var extra interface{}
+		if err := decoder.Decode(&extra); err != io.EOF {
+			serviceError(w, 400, "invalid_request", "Provide one JSON object.")
+			return
+		}
+		j, err := s.setSkipDuplicates(id, *input.Enabled)
+		if err != nil {
+			status := 409
+			if errors.Is(err, os.ErrNotExist) {
+				status = 404
+			}
+			serviceError(w, status, "invalid_state", err.Error())
+			return
+		}
+		writeServiceJSON(w, 200, j)
+		return
+	}
 	if parts[1] != "start" && parts[1] != "pause" && parts[1] != "retry" && parts[1] != "cleanup" {
 		serviceError(w, 404, "not_found", "Endpoint not found.")
 		return
@@ -253,7 +281,7 @@ func (s *archiveService) info(w http.ResponseWriter) {
 		path = parent
 	}
 	free := int64(stat.Bavail) * int64(stat.Bsize)
-	writeServiceJSON(w, 200, map[string]interface{}{"name": s.config.Name, "version": serviceVersion, "archiveBase": s.config.ArchiveBase, "roots": s.config.Roots, "freeBytes": free, "tools": tools})
+	writeServiceJSON(w, 200, map[string]interface{}{"name": s.config.Name, "version": serviceVersion, "archiveBase": s.config.ArchiveBase, "roots": s.config.Roots, "freeBytes": free, "tools": tools, "persistence": s.store.status()})
 }
 func (s *archiveService) browse(w http.ResponseWriter, r *http.Request) {
 	type entry struct {

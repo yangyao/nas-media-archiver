@@ -118,7 +118,7 @@ struct JobRow: View {
                 HStack(spacing: 5) {
                     Text(job.statusLabel)
                     Text("·")
-                    Text("\(job.completedFiles)/\(job.supportedFiles)")
+                    Text("\(job.processedFiles)/\(job.supportedFiles)")
                         .monospacedDigit()
                 }
                 .font(.system(size: 11)).foregroundStyle(.secondary)

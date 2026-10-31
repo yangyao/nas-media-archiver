@@ -16,16 +16,18 @@ import (
 )
 
 type archiveService struct {
-	mu        sync.Mutex
-	config    ServiceConfig
-	store     *serviceStore
-	token     string
-	jobs      map[string]*ServiceJob
-	wake      chan struct{}
-	stop      chan struct{}
-	closing   bool
-	wg        sync.WaitGroup
-	closeOnce sync.Once
+	mu              sync.Mutex
+	config          ServiceConfig
+	store           *serviceStore
+	token           string
+	jobs            map[string]*ServiceJob
+	wake            chan struct{}
+	stop            chan struct{}
+	closing         bool
+	wg              sync.WaitGroup
+	closeOnce       sync.Once
+	closeErr        error
+	metadataReaders chan *serviceMetadataReader
 }
 
 func newArchiveService(config ServiceConfig) (*archiveService, error) {
@@ -78,7 +80,11 @@ func newArchiveService(config ServiceConfig) (*archiveService, error) {
 		store.Close()
 		return nil, err
 	}
-	s := &archiveService{config: config, store: store, token: token, jobs: jobs, wake: make(chan struct{}, 1), stop: make(chan struct{})}
+	readers := make(chan *serviceMetadataReader, serviceMetadataWorkers)
+	for i := 0; i < serviceMetadataWorkers; i++ {
+		readers <- &serviceMetadataReader{}
+	}
+	s := &archiveService{metadataReaders: readers, config: config, store: store, token: token, jobs: jobs, wake: make(chan struct{}, 1), stop: make(chan struct{})}
 	archive, err := s.allowedPath(config.ArchiveBase, false)
 	if err != nil {
 		store.Close()
@@ -86,6 +92,11 @@ func newArchiveService(config ServiceConfig) (*archiveService, error) {
 	}
 	s.config.ArchiveBase = archive
 	for _, j := range jobs {
+		if len(j.Files) != j.TotalFiles {
+			j.ScanComplete = false
+			j.Status = "interrupted"
+			j.Error = "Checkpoint is incomplete; retry to rebuild the preview."
+		}
 		if j.Status == "scanning" || j.Status == "running" || j.Status == "pausing" || j.Status == "queued" {
 			j.Status = "interrupted"
 			j.Error = "Service restarted. Review and resume the task."
@@ -142,12 +153,16 @@ func loadServiceToken(path string) (string, error) {
 }
 func (s *archiveService) changed(j *ServiceJob, f *ServiceFile) error {
 	j.UpdatedAt = time.Now()
-	j.recalculate()
+	if f != nil {
+		j.updateFile(f)
+	}
 	return s.store.save(j, f)
 }
 func serviceJobSnapshot(j *ServiceJob) ServiceJob {
 	v := *j
 	v.Files = nil
+	v.counted = nil
+	v.scanCache = nil
 	v.SourcePaths = append([]string{}, j.SourcePaths...)
 	v.ResidualPaths = append([]string{}, j.ResidualPaths...)
 	return v
@@ -163,6 +178,9 @@ func (s *archiveService) listJobs() []ServiceJob {
 	return out
 }
 func (s *archiveService) createJob(sources []string, base string, cleanup bool) (ServiceJob, error) {
+	return s.createJobWithOptions(sources, base, cleanup, false)
+}
+func (s *archiveService) createJobWithOptions(sources []string, base string, cleanup, skipDuplicates bool) (ServiceJob, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closing {
@@ -183,7 +201,7 @@ func (s *archiveService) createJob(sources []string, base string, cleanup bool) 
 		return ServiceJob{}, err
 	}
 	now := time.Now()
-	j := &ServiceJob{ID: "job-" + hex.EncodeToString(b), Name: filepath.Base(paths[0]), SourcePaths: paths, ArchiveBase: target, CleanupEmptyDirectories: cleanup, Status: "scanning", CreatedAt: now, UpdatedAt: now, CleanupStatus: "not_requested", ResidualPaths: []string{}, Files: []*ServiceFile{}}
+	j := &ServiceJob{ID: "job-" + hex.EncodeToString(b), Name: filepath.Base(paths[0]), SourcePaths: paths, ArchiveBase: target, CleanupEmptyDirectories: cleanup, SkipDuplicates: skipDuplicates, Status: "scanning", CreatedAt: now, UpdatedAt: now, CleanupStatus: "not_requested", ResidualPaths: []string{}, Files: []*ServiceFile{}}
 	if len(paths) > 1 {
 		j.Name = fmt.Sprintf("%s + %d", j.Name, len(paths)-1)
 	}
@@ -203,6 +221,8 @@ func (s *archiveService) scanJob(j *ServiceJob) {
 	defer s.wg.Done()
 	reserved := map[string]bool{}
 	var scanErr error
+	// Enumerate cheaply first; metadata is the expensive, bounded parallel stage.
+	var files []*ServiceFile
 	for _, source := range j.SourcePaths {
 		err := filepath.WalkDir(source, func(path string, d fs.DirEntry, walkErr error) error {
 			if s.stopped() {
@@ -221,53 +241,19 @@ func (s *archiveService) scanJob(j *ServiceJob) {
 			if err != nil {
 				return err
 			}
-			f := &ServiceFile{SourcePath: path, Size: info.Size(), MTime: info.ModTime(), Status: "discovered"}
-			s.mu.Lock()
-			f.ID = fmt.Sprintf("file-%06d", len(j.Files)+1)
-			initial := *f
-			j.Files = append(j.Files, &initial)
-			err = s.changed(j, &initial)
-			s.mu.Unlock()
-			if err != nil {
-				return err
-			}
+			f := &ServiceFile{ID: fmt.Sprintf("file-%06d", len(files)+1), SourcePath: path, Size: info.Size(), MTime: info.ModTime(), Status: "discovered"}
 			if !info.Mode().IsRegular() || d.Type()&os.ModeSymlink != 0 {
 				f.Status = "unsupported"
 				f.Warning = "Symbolic links and special files are left at source."
 			} else if classifyArchiveType(path) == "misc" {
 				f.Status = "unsupported"
 				f.Warning = "Unsupported file type; left at source."
-			} else {
-				dt, src, e := detectDateTime(path, info.ModTime())
-				if e != nil {
-					f.Status = "failed"
-					f.Error = e.Error()
-				} else {
-					f.DateTime = dt.Format(time.RFC3339)
-					f.MetadataSource = src
-					f.Status = "planned"
-					if src == "mtime" {
-						f.Warning = "No capture date found; using original modification time."
-					}
-					ext := strings.ToLower(filepath.Ext(path))
-					base := filepath.Join(j.ArchiveBase, classifyArchiveType(path), dt.Format("2006"), dt.Format("01"), fmt.Sprintf("%s_%d%s", dt.Format("20060102_150405"), f.Size, ext))
-					target, collision, e := serviceAvailableTarget(base, reserved)
-					if e != nil {
-						f.Status = "failed"
-						f.Error = e.Error()
-					} else {
-						f.TargetPath = target
-						reserved[target] = true
-						if collision {
-							f.Warning = joinServiceWarning(f.Warning, "A duplicate name will be saved with a suffix.")
-						}
-					}
-				}
 			}
-			// The file is not visible while mutated: clone into the shared list under the lock.
+			files = append(files, f)
 			s.mu.Lock()
-			j.Files[len(j.Files)-1] = f
-			err = s.changed(j, f)
+			initial := *f
+			j.Files = append(j.Files, &initial)
+			err = s.changed(j, &initial)
 			s.mu.Unlock()
 			return err
 		})
@@ -276,8 +262,111 @@ func (s *archiveService) scanJob(j *ServiceJob) {
 			break
 		}
 	}
+	type result struct {
+		index int
+		file  *ServiceFile
+		date  time.Time
+	}
+	tasks := make(chan int)
+	results := make(chan result, serviceMetadataWorkers)
+	var workers sync.WaitGroup
+	for n := 0; n < serviceMetadataWorkers; n++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			var reader *serviceMetadataReader
+			select {
+			case reader = <-s.metadataReaders:
+			case <-s.stop:
+				return
+			}
+			defer func() { s.metadataReaders <- reader }()
+			for i := range tasks {
+				f := files[i]
+				var dt time.Time
+				if f.Status != "unsupported" {
+					cached, ok := j.scanCache[f.SourcePath]
+					if ok && cached.Status == "planned" && cached.Size == f.Size && cached.MTime.Equal(f.MTime) {
+						dt, _ = time.Parse(time.RFC3339, cached.DateTime)
+						f.MetadataSource = cached.MetadataSource
+					}
+					if dt.IsZero() {
+						var err error
+						dt, f.MetadataSource, err = reader.detect(f.SourcePath, f.MTime)
+						if err != nil {
+							f.Status = "failed"
+							f.Error = err.Error()
+						}
+					}
+					if f.Status != "failed" {
+						f.Status = "planned"
+						f.DateTime = dt.Format(time.RFC3339)
+						if f.MetadataSource == "mtime" {
+							f.Warning = "No capture date found; using original modification time."
+						}
+					}
+				}
+				results <- result{i, f, dt}
+			}
+		}()
+	}
+	go func() {
+		defer close(tasks)
+		for i := range files {
+			select {
+			case tasks <- i:
+			case <-s.stop:
+				return
+			}
+		}
+	}()
+	go func() { workers.Wait(); close(results) }()
+	// Apply in discovery order so collision suffixes remain deterministic even
+	// when metadata requests finish out of order.
+	pending := map[int]result{}
+	next := 0
+	for r := range results {
+		pending[r.index] = r
+		for {
+			current, ok := pending[next]
+			if !ok {
+				break
+			}
+			delete(pending, next)
+			f, dt := current.file, current.date
+			if f.Status == "planned" {
+				base := filepath.Join(j.ArchiveBase, classifyArchiveType(f.SourcePath), dt.Format("2006"), dt.Format("01"), fmt.Sprintf("%s_%d%s", dt.Format("20060102_150405"), f.Size, strings.ToLower(filepath.Ext(f.SourcePath))))
+				target, collision, err := serviceAvailableTarget(base, reserved)
+				if err != nil {
+					f.Status = "failed"
+					f.Error = err.Error()
+				} else {
+					f.TargetPath = target
+					reserved[target] = true
+					if collision {
+						f.Warning = joinServiceWarning(f.Warning, "A duplicate name will be saved with a suffix.")
+					}
+				}
+			}
+			s.mu.Lock()
+			j.Files[next] = f
+			j.CurrentFile = f.SourcePath
+			err := s.changed(j, f)
+			s.mu.Unlock()
+			if err != nil && scanErr == nil {
+				scanErr = err
+			}
+			next++
+		}
+	}
+	if s.stopped() && scanErr == nil {
+		scanErr = errors.New("scan interrupted by service shutdown")
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	j.CurrentFile = ""
+	j.scanCache = nil
 	if scanErr != nil {
 		j.Status = "failed"
 		if s.closing {
@@ -406,10 +495,13 @@ func (s *archiveService) jobAction(id, action string) (ServiceJob, error) {
 			return ServiceJob{}, err
 		}
 		if !j.ScanComplete {
-			if _, err := s.store.db.Exec(`DELETE FROM service_files WHERE job_id=?`, j.ID); err != nil {
-				return ServiceJob{}, err
+			j.scanCache = make(map[string]ServiceFile, len(j.Files))
+			for _, f := range j.Files {
+				j.scanCache[f.SourcePath] = *f
 			}
+			s.store.resetFiles(j.ID)
 			j.Files = []*ServiceFile{}
+			j.recalculate()
 			j.Status = "scanning"
 			j.Error = ""
 			j.DateRangeStart = ""
@@ -480,6 +572,7 @@ func (s *archiveService) worker() {
 	}
 }
 func (s *archiveService) runJob(j *ServiceJob) {
+	duplicates := newServiceDuplicateIndex()
 	for _, f := range j.Files {
 		s.mu.Lock()
 		if s.closing || j.Status == "pausing" {
@@ -490,7 +583,7 @@ func (s *archiveService) runJob(j *ServiceJob) {
 			s.mu.Unlock()
 			return
 		}
-		skip := f.Status == "completed" || f.Status == "unsupported" || f.Status == "failed"
+		skip := f.Status == "completed" || f.Status == "skipped" || f.Status == "unsupported" || f.Status == "failed"
 		if !skip {
 			j.CurrentFile = f.SourcePath
 			j.CurrentFileBytes = 0
@@ -500,7 +593,17 @@ func (s *archiveService) runJob(j *ServiceJob) {
 		if skip {
 			continue
 		}
-		err := s.archiveFile(j, f)
+		var err error
+		skipped := false
+		if j.SkipDuplicates {
+			skipped, err = s.skipDuplicate(j, f, duplicates)
+		}
+		if err == nil && !skipped {
+			err = s.archiveFile(j, f)
+		}
+		if err == nil && f.Status == "completed" {
+			duplicates.add(f.TargetPath)
+		}
 		s.mu.Lock()
 		if err != nil {
 			f.Status = "failed"
@@ -583,9 +686,13 @@ func (s *archiveService) Close() error {
 		s.mu.Unlock()
 		close(s.stop)
 		s.wg.Wait()
-		_ = s.store.Close()
+		for i := 0; i < serviceMetadataWorkers; i++ {
+			reader := <-s.metadataReaders
+			reader.Close()
+		}
+		s.closeErr = s.store.Close()
 	})
-	return nil
+	return s.closeErr
 }
 
 // Explicit retry creates a new preview for files that never reached a durable
@@ -651,7 +758,7 @@ func (s *archiveService) replanFailedLocked(j *ServiceJob) error {
 				f.Error = err.Error()
 			}
 		}
-		if err := s.store.save(j, f); err != nil {
+		if err := s.changed(j, f); err != nil {
 			return err
 		}
 	}

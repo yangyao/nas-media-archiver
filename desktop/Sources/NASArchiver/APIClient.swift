@@ -60,6 +60,9 @@ struct APIClient: Sendable {
     func action(_ action: String, jobID: String) async throws -> ArchiveJob {
         try await fetch(ArchiveJob.self, path: "jobs/\(jobID)/\(action)", method: "POST")
     }
+    func setSkipDuplicates(jobID: String, enabled: Bool) async throws -> ArchiveJob {
+        try await fetch(ArchiveJob.self, path: "jobs/\(jobID)/skip-duplicates", method: "POST", body: JSONEncoder().encode(["enabled": enabled]))
+    }
     func files(jobID: String, filter: FileFilter, offset: Int = 0) async throws -> FilesPage {
         try await fetch(FilesPage.self, path: "jobs/\(jobID)/files", query: [.init(name: "filter", value: filter.rawValue), .init(name: "offset", value: "\(offset)"), .init(name: "limit", value: "200")])
     }

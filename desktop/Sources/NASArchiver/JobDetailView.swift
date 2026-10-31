@@ -37,14 +37,14 @@ struct JobDetailView: View {
                     } else {
                         VStack(alignment: .leading, spacing: 11) {
                             HStack {
-                                Text(job.status == "ready" ? "預覽已準備好" : "\(job.completedFiles) / \(job.supportedFiles) 個檔案")
+                                Text(job.status == "ready" ? "預覽已準備好" : "\(job.processedFiles) / \(job.supportedFiles) 個檔案")
                                     .font(.headline).monospacedDigit()
                                 Spacer()
                                 if job.status != "ready" { Text(job.progress, format: .percent.precision(.fractionLength(0))).font(.callout.weight(.medium)).monospacedDigit() }
                             }
                             if job.status != "ready" && !job.isTerminal { ProgressView(value: job.progress).tint(job.failedFiles > 0 ? Color.orange : Color.accentColor) }
                             HStack {
-                                Text(job.status == "ready" ? "共 \(formattedBytes(job.totalBytes))" : "\(formattedBytes(min(job.supportedBytes, job.completedBytes + job.currentFileBytes))) / \(formattedBytes(job.supportedBytes))")
+                                Text(job.status == "ready" ? "共 \(formattedBytes(job.totalBytes))" : "\(formattedBytes(min(job.supportedBytes, job.processedBytes + job.currentFileBytes))) / \(formattedBytes(job.supportedBytes))")
                                 Spacer()
                                 Text("失敗 \(job.failedFiles)").foregroundStyle(job.failedFiles > 0 ? Color.orange : Color.secondary)
                             }.font(.callout).foregroundStyle(.secondary).monospacedDigit()
@@ -54,8 +54,20 @@ struct JobDetailView: View {
                             }
                         }
                     }
+                    if job.canStart {
+                        Toggle("略過重複檔案", isOn: Binding(
+                            get: { job.skipDuplicates ?? false },
+                            set: { enabled in Task { await model.setSkipDuplicates(enabled, job: job) } }
+                        )).toggleStyle(.checkbox).font(.callout)
+                            .disabled(model.isPerformingAction || !model.isConnected)
+                            .help("以拍攝時間、大小和副檔名找候選，再完整比對內容；相同時保留來源。")
+                    }
+                    if (job.skippedFiles ?? 0) > 0 {
+                        Text("已歸檔 \(job.completedFiles) · 略過重複 \(job.skippedFiles ?? 0)（保留來源）")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
                     if job.status == "ready" {
-                        Label("開始後會移動這些檔案，校驗完成後清理來源。", systemImage: "checkmark.shield")
+                        Label(job.skipDuplicates == true ? "重複檔案保留來源，其餘校驗後移動。" : "開始後會移動這些檔案，校驗完成後清理來源。", systemImage: "checkmark.shield")
                             .font(.callout).foregroundStyle(.secondary)
                     }
                     if (job.unsupportedFiles ?? 0) > 0 {

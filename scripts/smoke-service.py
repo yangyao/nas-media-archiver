@@ -154,7 +154,36 @@ def main():
                     time.sleep(.1)
                 assert job2['status'] == 'completed' and job2['cleanupStatus'] == 'done', job2
                 assert not clean.exists(), 'Empty batch directory was not removed'
-                print('PASS: auth, path containment, preview, SSE, archive, SHA-256, collision preservation, unsupported residuals and empty-directory cleanup')
+                # Confirm duplicate skipping through the public API, retaining
+                # the source and avoiding any extra destination file.
+                duplicates = sources / 'duplicate batch'
+                duplicates.mkdir()
+                duplicate = duplicates / 'IMG_20260701_120000.jpg'
+                duplicate.write_bytes(fixtures[duplicate.name])
+                before = sorted(str(p) for p in archive.rglob('*') if p.is_file())
+                job3 = request('POST', '/api/v1/jobs', {'sourcePaths': [str(duplicates)], 'archiveBase': str(archive), 'cleanupEmptyDirectories': True, 'skipDuplicates': True})
+                path3 = '/api/v1/jobs/' + job3['id']
+                deadline = time.monotonic() + 30
+                while job3['status'] == 'scanning':
+                    assert time.monotonic() < deadline
+                    time.sleep(.05)
+                    job3 = request('GET', path3)
+                assert job3['skipDuplicates']
+                rejected('POST', path3 + '/skip-duplicates', {})
+                assert not request('POST', path3 + '/skip-duplicates', {'enabled': False})['skipDuplicates']
+                assert request('POST', path3 + '/skip-duplicates', {'enabled': True})['skipDuplicates']
+                request('POST', path3 + '/start')
+                while True:
+                    job3 = request('GET', path3)
+                    if job3['status'] in ('completed', 'completed_with_errors', 'failed'):
+                        break
+                    assert time.monotonic() < deadline
+                    time.sleep(.05)
+                assert job3['status'] == 'completed' and job3['skippedFiles'] == 1 and job3['completedFiles'] == 0, job3
+                assert duplicate.read_bytes() == fixtures[duplicate.name]
+                assert sorted(str(p) for p in archive.rglob('*') if p.is_file()) == before
+                assert job3['cleanupStatus'] == 'residual'
+                print('PASS: auth, path containment, preview, SSE, archive, SHA-256, collisions, duplicate skipping with source retention, residuals and cleanup')
             except Exception:
                 log.flush()
                 log.seek(0)

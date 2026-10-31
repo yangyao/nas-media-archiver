@@ -33,6 +33,9 @@ struct ArchiveJob: Codable, Identifiable, Equatable, Sendable {
     var sourcePaths: [String]
     var archiveBase: String
     var cleanupEmptyDirectories: Bool
+    var skipDuplicates: Bool?
+    var skippedFiles: Int?
+    var skippedBytes: Int64?
     var status: String
     var createdAt: String
     var updatedAt: String
@@ -58,13 +61,15 @@ struct ArchiveJob: Codable, Identifiable, Equatable, Sendable {
     var supportedFiles: Int { max(0, totalFiles - (unsupportedFiles ?? 0)) }
     var supportedBytes: Int64 { max(0, totalBytes - (unsupportedBytes ?? 0)) }
     var canStart: Bool { ["ready", "paused", "interrupted"].contains(status) && !needsRescan }
+    var processedFiles: Int { completedFiles + (skippedFiles ?? 0) }
+    var processedBytes: Int64 { completedBytes + (skippedBytes ?? 0) }
     var canPause: Bool { ["running", "queued"].contains(status) }
     var progress: Double {
         guard supportedBytes > 0 else {
             if supportedFiles == 0 { return isTerminal ? 1 : 0 }
-            return min(1, Double(completedFiles) / Double(supportedFiles))
+            return min(1, Double(processedFiles) / Double(supportedFiles))
         }
-        return min(1, max(0, (Double(completedBytes) + Double(currentFileBytes)) / Double(supportedBytes)))
+        return min(1, max(0, (Double(processedBytes) + Double(currentFileBytes)) / Double(supportedBytes)))
     }
     var statusLabel: String {
         switch status {
@@ -105,6 +110,8 @@ struct ArchiveFile: Codable, Identifiable, Sendable {
         case "discovered": "待掃描"
         case "planned": "待歸檔"
         case "copying": "複製並校驗"
+        case "checking": "比對重複"
+        case "skipped": "重複，略過"
         case "completed": "已歸檔"
         case "failed": "失敗"
         case "unsupported": "不支援"
@@ -118,6 +125,7 @@ struct CreateJobRequest: Codable, Sendable {
     var sourcePaths: [String]
     var archiveBase: String
     var cleanupEmptyDirectories: Bool
+    var skipDuplicates: Bool = true
 }
 
 enum FileFilter: String, CaseIterable, Identifiable {
