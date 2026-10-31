@@ -114,10 +114,18 @@ struct JobRow: View {
                 .foregroundStyle(job.failedFiles > 0 ? Color.orange : Color.secondary)
                 .frame(width: 23)
             VStack(alignment: .leading, spacing: 4) {
-                Text(job.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                HStack(spacing: 5) {
-                    Text(job.statusLabel)
+                HStack(spacing: 6) {
+                    Text(job.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                    if let ordinal = taskOrdinal(job, among: model.jobs) {
+                        TaskRunBadge(ordinal: ordinal).help("建立於 \(job.creationDescription)")
+                    }
                 }
+                HStack(spacing: 5) {
+                    if taskOrdinal(job, among: model.jobs) != nil {
+                        Text("\(job.totalFiles.formatted()) 個 ·")
+                    }
+                    Text(job.statusLabel)
+                }.help("建立於 \(job.creationDescription)")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
                 if ["running", "pausing"].contains(job.status) {
                     ProgressView(value: job.progress).controlSize(.mini)
@@ -168,5 +176,18 @@ struct StatusBanner: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(isError ? Color.orange.opacity(0.08) : Color.secondary.opacity(0.06))
+    }
+}
+
+struct TaskRunBadge: View {
+    var ordinal: Int
+    var body: some View {
+        Text("#\(ordinal)")
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 5).padding(.vertical, 2)
+            .background(.quaternary.opacity(0.5), in: Capsule())
+            .fixedSize()
+            .accessibilityLabel("第 \(ordinal) 次任務")
     }
 }

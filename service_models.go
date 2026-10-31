@@ -2,7 +2,7 @@ package main
 
 import "time"
 
-const serviceVersion = "0.2.3"
+const serviceVersion = "0.2.4"
 
 type ServiceJob struct {
 	SkipDuplicates          bool           `json:"skipDuplicates"`

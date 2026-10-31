@@ -878,7 +878,7 @@ func detectDateTime(path string, mtime time.Time) (time.Time, string, error) {
 		if dt, err := extractJPEGExif(path); err == nil {
 			return dt, "native-exif", nil
 		}
-	case ".heic", ".png", ".webp":
+	case ".heic", ".png", ".webp", ".gif":
 		if dt, err := extractWithExiftool(path); err == nil {
 			return dt, "exiftool", nil
 		}
@@ -967,12 +967,17 @@ func extractWithFFProbe(path string) (time.Time, error) {
 }
 
 var (
-	reYMDHMS1 = regexp.MustCompile(`(?i)(?:IMG|VID)[-_](\d{8})[_-](\d{6})`)
-	reYMDHMS2 = regexp.MustCompile(`(\d{4})-(\d{2})-(\d{2})[ _](\d{2})\.(\d{2})\.(\d{2})`)
-	reMillis  = regexp.MustCompile(`mmexport(\d{13})`)
+	reYMDHMS1    = regexp.MustCompile(`(?i)(?:IMG|VID)[-_](\d{8})[_-](\d{6})`)
+	reYMDHMS2    = regexp.MustCompile(`(\d{4})-(\d{2})-(\d{2})[ _](\d{2})\.(\d{2})\.(\d{2})`)
+	reBareYMDHMS = regexp.MustCompile(`^(\d{8})_?(\d{6})(?:[_.-]|$)`)
+	reMillis     = regexp.MustCompile(`mmexport(\d{13})`)
 )
 
 func parseFilenameTime(name string) (time.Time, bool) {
+	if m := reBareYMDHMS.FindStringSubmatch(name); len(m) == 3 {
+		dt, err := time.Parse("20060102150405", m[1]+m[2])
+		return dt, err == nil
+	}
 	if m := reYMDHMS1.FindStringSubmatch(name); len(m) == 3 {
 		dt, err := time.Parse("20060102150405", m[1]+m[2])
 		return dt, err == nil
@@ -1012,7 +1017,7 @@ func planTarget(base string, task *Task) (string, string, bool, error) {
 
 func classifyArchiveType(path string) string {
 	switch strings.ToLower(filepath.Ext(path)) {
-	case ".jpg", ".jpeg", ".heic", ".webp":
+	case ".jpg", ".jpeg", ".heic", ".webp", ".gif":
 		return "photos"
 	case ".png":
 		return "pngs"

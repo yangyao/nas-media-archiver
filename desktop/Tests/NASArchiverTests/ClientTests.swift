@@ -64,6 +64,23 @@ final class ClientTests: XCTestCase {
         XCTAssertEqual(contents.entries[0].note, "系統目錄，保留即可")
     }
 
+    func testSameNamedRunsUseShortOrdinalsWithoutChangingNames() throws {
+        let first = try JSONDecoder().decode(ArchiveJob.self, from: Data(jobFixture.utf8))
+        var second = first
+        second.id = "second-run"
+        second.createdAt = "2026-11-01T00:49:00.123456789+08:00"
+        second.totalFiles = 4
+        XCTAssertNil(taskOrdinal(first, among: [first]))
+        XCTAssertEqual(taskOrdinal(first, among: [second, first]), 1)
+        XCTAssertEqual(taskOrdinal(second, among: [second, first]), 2)
+        XCTAssertEqual(second.name, first.name)
+        XCTAssertNotNil(second.createdDate)
+        var unrelated = second
+        unrelated.id = "different-name"
+        unrelated.name = "Other folder"
+        XCTAssertNil(taskOrdinal(unrelated, among: [first, second, unrelated]))
+    }
+
     func testUnsupportedOnlyJobFinishesAndInterruptedScanRequiresRescan() throws {
         var job = try JSONDecoder().decode(ArchiveJob.self, from: Data(jobFixture.utf8))
         job.unsupportedFiles = job.totalFiles

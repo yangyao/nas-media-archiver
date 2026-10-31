@@ -127,7 +127,7 @@ func (r *serviceMetadataReader) detect(path string, mtime time.Time) (time.Time,
 		if dt, err := extractJPEGExif(path); err == nil {
 			return dt, "native-exif", nil
 		}
-	case ".heic", ".png", ".webp":
+	case ".heic", ".png", ".webp", ".gif":
 		if dt, err := r.exif(path); err == nil {
 			return dt, "exiftool", nil
 		}

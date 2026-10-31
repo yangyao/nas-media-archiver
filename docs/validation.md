@@ -119,3 +119,28 @@ or alter the real task's seven attention records.
   `CODE_SIGN_IDENTITY` still overrides it and CI can fall back to ad hoc signing.
   The Apple Development-signed build was successfully connected to the real NAS.
   Apple's guidance: https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy
+
+## Version 0.2.4 GIF support and app identity
+
+GIFs now follow the photo archive pipeline. Tests verify filename capture dates
+(including all four retained real GIF naming patterns), invalid-date rejection,
+unchanged GIF bytes, checksum-backed source removal and duplicate source
+retention. Go race/vet and real-process smoke checks passed.
+
+The real QNAP was upgraded while idle, with a pre-upgrade state backup. A new
+four-file GIF preview was created with zero unsupported/attention records, using
+2020/2021 capture dates from filenames. At the user's request this new task was
+started: all four archived successfully, with zero skips or failures. Each
+published target's SHA-256 was independently checked against the task record,
+and each completed source was absent. The original 7,711-file task history was
+preserved. The source folder still retains its Syncthing marker intentionally.
+
+The app explicitly loads its bundled ICNS into `NSApplication.applicationIconImage`
+at launch, avoiding stale runtime Dock icons after development builds. Launch
+Services registration was refreshed for the local bundle. Native About-panel
+screenshots verified the generated blue photo/archive icon and version 0.2.4.
+
+Repeated folder names keep their original names and receive separate short run
+badges (`#1`, `#2`); sidebar counts/status and creation-time hover hints distinguish
+runs without long dates in titles. Swift tests cover ordinal ordering independent
+of list order and existing nanosecond timestamp parsing (19 tests passed).

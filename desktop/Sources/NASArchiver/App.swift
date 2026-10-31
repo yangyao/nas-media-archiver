@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct NASArchiverApp: App {
+    @NSApplicationDelegateAdaptor(ArchiverApplicationDelegate.self) private var appDelegate
     @StateObject private var model = AppModel()
     @AppStorage("appearance") private var appearance = "system"
     var body: some Scene {
@@ -25,5 +26,17 @@ struct NASArchiverApp: App {
             }
         }
         Settings { ClientSettingsView().environmentObject(model) }
+    }
+}
+
+@MainActor
+final class ArchiverApplicationDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Load the actual bundle resource rather than a cached Launch Services
+        // icon associated with an earlier development build at this path.
+        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+           let icon = NSImage(contentsOf: url) {
+            NSApplication.shared.applicationIconImage = icon
+        }
     }
 }

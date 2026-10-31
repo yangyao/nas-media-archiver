@@ -15,7 +15,12 @@ struct JobDetailView: View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .top, spacing: 16) {
-                    Text(job.name).font(.title2.weight(.semibold)).textSelection(.enabled)
+                    HStack(spacing: 8) {
+                        Text(job.name).font(.title2.weight(.semibold)).textSelection(.enabled)
+                        if let ordinal = taskOrdinal(job, among: model.jobs) {
+                            TaskRunBadge(ordinal: ordinal).help("建立於 \(job.creationDescription)")
+                        }
+                    }
                     Spacer(minLength: 12)
                     actionButtons
                 }

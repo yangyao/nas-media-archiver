@@ -109,3 +109,18 @@ hashing and new archive writes, not all disk reads. Preview remains metadata-onl
   cannot be relocated through this endpoint.
 - `filter=skipped` is accepted on the file-list endpoint. Attention counters now
   include errors consistently with the attention filter.
+
+### GIF and repeated runs (0.2.4)
+
+GIF files use the photo pipeline and `photos/YYYY/MM` destinations. They are
+copied byte-for-byte without frame extraction or transcoding, and use the same
+candidate comparison, checksum verification and source-removal safeguards as
+other media. Capture dates prefer filenames, then ExifTool, then mtime fallback.
+Bare `YYYYMMDDHHMMSS` / `YYYYMMDD_HHMMSS` names with extension or underscore/hyphen
+suffixes are supported, with calendar validation.
+
+Re-scanning retained files creates a separate job and preserves the previous
+job's historical results. Names remain the source-folder basename. The Mac app
+uses separate `#1`, `#2` badges for same-named jobs, ordered by creation time;
+compact file counts and status distinguish their scopes. Creation time is in a
+hover hint, not appended to the name. Actual job IDs identify API operations.

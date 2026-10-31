@@ -56,6 +56,15 @@ struct ArchiveJob: Codable, Identifiable, Equatable, Sendable {
     var cleanupStatus: String
     var residualPaths: [String]
 
+    var createdDate: Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: createdAt) ?? ISO8601DateFormatter().date(from: createdAt)
+    }
+    var creationDescription: String {
+        guard let date = createdDate else { return createdAt }
+        return date.formatted(date: .abbreviated, time: .standard)
+    }
     var isTerminal: Bool { ["completed", "completed_with_errors", "failed"].contains(status) }
     var needsRescan: Bool { status == "interrupted" && scanComplete == false }
     var supportedFiles: Int { max(0, totalFiles - (unsupportedFiles ?? 0)) }
@@ -116,6 +125,7 @@ struct ArchiveFile: Codable, Identifiable, Sendable {
     }
     var reviewAdvice: String? {
         if status == "failed" { return "來源已保留。確認錯誤原因後，重試此任務的失敗檔案。" }
+        if status == "unsupported" && name.lowercased().hasSuffix(".gif") { return "此為舊任務的掃描結果；新版已支援 GIF，仍在來源的檔案可建立新任務重新掃描。" }
         if status == "unsupported" { return "此格式不會自動歸檔。可查看來源，另行保存或轉換格式。" }
         if needsDateReview { return "未找到拍攝日期，使用了檔案修改日期。日期正確可直接確認；尚未歸檔時也能設定日期。" }
         if warning.localizedCaseInsensitiveContains("suffix") { return "原有檔案不會覆蓋。不同內容以後綴另存；相同內容可啟用略過重複。" }
@@ -179,7 +189,6 @@ struct RemoteContentEntry: Decodable, Identifiable, Sendable {
         if system { return "系統目錄，保留即可" }
         if symlink { return "符號連結，不會自動處理" }
         if path.contains("/.stfolder/") { return "Syncthing 同步標記，保留即可" }
-        if name.lowercased().hasSuffix(".gif") { return "GIF 尚未支援自動歸檔，可另行保存或轉換格式" }
         if isDirectory { return "資料夾" }
         return "保留在服務端；可複製路徑另行處理"
     }
@@ -192,4 +201,18 @@ struct RemoteContents: Decodable, Sendable {
 
 func displayRemotePath(_ path: String) -> String {
     path.replacingOccurrences(of: #"^/share/CACHEDEV[0-9]+_DATA/"#, with: "/share/", options: .regularExpression)
+}
+
+// A short visual identifier distinguishes repeated runs without lengthening the
+// folder name. Actual job IDs remain the identity for all remote operations.
+func taskOrdinal(_ job: ArchiveJob, among jobs: [ArchiveJob]) -> Int? {
+    let matching = jobs.filter { $0.name == job.name }
+    guard matching.count > 1 else { return nil }
+    let matches = matching.sorted {
+        let left = $0.createdDate ?? .distantPast
+        let right = $1.createdDate ?? .distantPast
+        return left == right ? $0.id < $1.id : left < right
+    }
+    guard let index = matches.firstIndex(where: { $0.id == job.id }) else { return nil }
+    return index + 1
 }
