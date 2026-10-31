@@ -1,74 +1,36 @@
 import SwiftUI
 
-enum TaskSection: String, CaseIterable, Identifiable {
-    case active, history
-    var id: String { rawValue }
-    var title: String { self == .active ? "正在處理" : "歷史記錄" }
-    var icon: String { self == .active ? "tray.and.arrow.down" : "clock.arrow.circlepath" }
-}
-
 struct ContentView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var section: TaskSection? = .active
-    @State private var showNASPopover = false
 
-    private var visibleJobs: [ArchiveJob] {
-        model.jobs.filter { section == .history ? $0.isTerminal : !$0.isTerminal }
+    private var activeJobs: [ArchiveJob] { model.jobs.filter { !$0.isTerminal } }
+    private var historyJobs: [ArchiveJob] { model.jobs.filter { $0.isTerminal } }
+    private var subtitle: String {
+        if model.isConnecting { return "正在連線…" }
+        if !model.isConnected { return "尚未連線" }
+        return activeJobs.isEmpty ? "沒有進行中的任務" : "\(activeJobs.count) 個任務"
     }
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $section) {
-                Section("歸檔") {
-                    ForEach(TaskSection.allCases) { item in
-                        Label(item.title, systemImage: item.icon).tag(item)
+            List(selection: $model.selectedJobID) {
+                Section("正在處理") {
+                    if activeJobs.isEmpty {
+                        Text("沒有進行中的任務")
+                            .font(.callout).foregroundStyle(.tertiary)
+                            .padding(.vertical, 5)
+                    }
+                    ForEach(activeJobs) { job in JobRow(job: job).tag(job.id) }
+                }
+                if !historyJobs.isEmpty {
+                    Section("歷史記錄") {
+                        ForEach(historyJobs) { job in JobRow(job: job).tag(job.id) }
                     }
                 }
             }
-            .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 230)
-            .safeAreaInset(edge: .bottom) {
-                HStack(spacing: 7) {
-                    Image(systemName: "server.rack")
-                    Text("檔案由服務端安全處理").font(.caption)
-                }
-                .foregroundStyle(.secondary).padding(16)
-            }
-        } content: {
-            VStack(spacing: 0) {
-                HStack {
-                    Text(section?.title ?? "正在處理").font(.title2.weight(.semibold))
-                    Spacer()
-                    Text("\(visibleJobs.count)").foregroundStyle(.secondary).monospacedDigit()
-                }.padding(20)
-                Divider()
-                if model.isConnecting {
-                    Spacer(); ProgressView("正在連線服務端…"); Spacer()
-                } else if visibleJobs.isEmpty {
-                    ContentUnavailableView {
-                        Label(model.isConnected ? (section == .history ? "暫無歸檔記錄" : "準備好整理回憶") : "連線歸檔服務端", systemImage: model.isConnected ? "tray" : "server.rack")
-                    } description: {
-                        Text(model.isConnected ? "選擇服務端上的資料夾，預覽後開始歸檔。" : "歸檔由服務端執行，Mac 負責管理；服務端可安裝在 NAS 上。")
-                    } actions: {
-                        if model.isConnected && section != .history {
-                            Button("新增歸檔", systemImage: "plus") { model.showNewArchive = true }.buttonStyle(.borderedProminent)
-                        } else if !model.isConnected {
-                            Button(model.selectedConnection == nil ? "新增服務端" : "重新連線") {
-                                if let connection = model.selectedConnection { model.connect(connection) }
-                                else { model.connectionEditor = .init(connection: nil) }
-                            }.buttonStyle(.borderedProminent)
-                            if let connection = model.selectedConnection {
-                                Button("連線設定…") { model.connectionEditor = .init(connection: connection) }
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    List(visibleJobs, selection: $model.selectedJobID) { job in
-                        JobRow(job: job).tag(job.id).padding(.vertical, 6)
-                    }.listStyle(.inset)
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 270, ideal: 310, max: 420)
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 340)
+            .safeAreaInset(edge: .bottom, spacing: 0) { connectionFooter }
         } detail: {
             VStack(spacing: 0) {
                 if let message = model.updatesMessage {
@@ -80,76 +42,117 @@ struct ContentView: View {
                 if let job = model.selectedJob {
                     JobDetailView(job: job).id(job.id)
                 } else {
-                    ContentUnavailableView("選擇歸檔任務", systemImage: "folder.badge.gearshape", description: Text("在左側選擇任務，查看進度和檔案詳情。"))
+                    VStack(spacing: 12) {
+                        Text(model.isConnected ? "選擇一個歸檔任務" : "連線後開始整理照片")
+                            .font(.headline).foregroundStyle(.secondary)
+                        if model.isConnected && model.jobs.isEmpty {
+                            Button("新增歸檔…") { model.showNewArchive = true }
+                        } else if !model.isConnected && !model.isConnecting {
+                            Button("設定連線…") { editConnection() }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         }
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                Button {
-                    showNASPopover.toggle()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "server.rack")
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(model.selectedConnection?.name ?? "連線服務端").font(.headline)
-                            Text(model.connectionLabel).font(.caption2).foregroundStyle(.secondary)
-                        }
-                        Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
-                    }.padding(.horizontal, 4)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("媒體歸檔").font(.headline)
+                    Text(subtitle).font(.caption2).foregroundStyle(.secondary)
                 }
-                .help("切換服務端 或查看連線設定")
-                .popover(isPresented: $showNASPopover, arrowEdge: .bottom) {
-                    NASPopover { showNASPopover = false }
-                        .environmentObject(model)
-                }
+                .padding(.leading, 2)
             }
-            ToolbarItem(placement: .primaryAction) {
+            .sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .automatic) {
                 Button("新增歸檔", systemImage: "plus") { model.showNewArchive = true }
+                    .labelStyle(.iconOnly)
+                    .help("新增歸檔（⌘N）")
                     .disabled(!model.isConnected)
             }
-            ToolbarItem(placement: .automatic) {
-                Button("刷新", systemImage: "arrow.clockwise") { Task { await model.refresh() } }
-                    .disabled(model.isConnecting)
-            }
         }
+        .toolbar(removing: .title)
         .sheet(item: $model.connectionEditor) { target in
             ConnectionEditorView(connection: target.connection).environmentObject(model)
         }
         .sheet(isPresented: $model.showNewArchive) {
             NewArchiveView().environmentObject(model)
         }
-        .onChange(of: model.selectedJobID) { _, id in
-            guard let job = model.jobs.first(where: { $0.id == id }) else { return }
-            section = job.isTerminal ? .history : .active
+    }
+
+    private var connectionFooter: some View {
+        VStack(spacing: 0) {
+            Divider()
+            Button { editConnection() } label: {
+                HStack(spacing: 8) {
+                    if model.isConnecting {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Circle().fill(model.isConnected ? Color.green : Color.secondary.opacity(0.5))
+                            .frame(width: 6, height: 6)
+                    }
+                    Text(model.selectedConnection == nil ? "設定連線…" : model.connectionLabel)
+                        .font(.callout).foregroundStyle(.secondary)
+                    Spacer()
+                    Image(systemName: "gearshape").foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+                .padding(.horizontal, 16).padding(.vertical, 13)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("服務連線設定，\(model.connectionLabel)")
+            .help("設定歸檔服務的地址與連線權杖")
         }
-        .onChange(of: model.selectedJob?.isTerminal) { _, terminal in
-            if terminal == true { section = .history }
-        }
+        .background(.bar)
+    }
+
+    private func editConnection() {
+        model.connectionEditor = .init(connection: model.selectedConnection)
     }
 }
 
 struct JobRow: View {
+    @EnvironmentObject private var model: AppModel
     var job: ArchiveJob
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(alignment: .top, spacing: 9) {
-                Image(systemName: job.isTerminal ? (job.failedFiles == 0 ? "checkmark.circle.fill" : "exclamationmark.circle.fill") : "folder.fill")
-                    .foregroundStyle(job.failedFiles > 0 ? Color.orange : Color.accentColor)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(job.name).font(.headline).lineLimit(2)
-                    Text(job.statusLabel).font(.caption).foregroundStyle(.secondary)
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: job.isTerminal ? (job.failedFiles > 0 ? "exclamationmark.circle" : "archivebox") : "folder")
+                .font(.system(size: 17))
+                .foregroundStyle(job.failedFiles > 0 ? Color.orange : Color.secondary)
+                .frame(width: 23)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(job.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                HStack(spacing: 5) {
+                    Text(job.statusLabel)
+                    Text("·")
+                    Text("\(job.completedFiles)/\(job.supportedFiles)")
+                        .monospacedDigit()
                 }
-                Spacer(minLength: 0)
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                if ["running", "pausing"].contains(job.status) {
+                    ProgressView(value: job.progress).controlSize(.mini)
+                }
             }
-            if job.status == "scanning" { ProgressView().controlSize(.small) }
-            else if !job.isTerminal && job.status != "ready" { ProgressView(value: job.progress) }
-            HStack {
-                Text("\(job.completedFiles) / \(job.supportedFiles) 個檔案")
-                Spacer()
-                Text(formattedBytes(job.totalBytes))
-            }.font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            Spacer(minLength: 0)
+            if job.canStart {
+                Button(job.status == "ready" ? "開始歸檔" : "繼續歸檔", systemImage: "play.fill") {
+                    Task { await model.perform("start", job: job) }
+                }
+                .labelStyle(.iconOnly).buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .disabled(!model.isConnected || model.isPerformingAction)
+            } else if job.canPause {
+                Button("暫停歸檔", systemImage: "pause.fill") {
+                    Task { await model.perform("pause", job: job) }
+                }
+                .labelStyle(.iconOnly).buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .disabled(!model.isConnected || model.isPerformingAction)
+            }
         }
+        .padding(.vertical, 6)
+        .help(job.name)
     }
 }
 

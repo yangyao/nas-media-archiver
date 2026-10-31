@@ -61,9 +61,9 @@ make test                  # Go race tests
 make smoke                 # Live HTTP integration test with disposable media
 ```
 
-The server selector lives in the top-left toolbar. Active tasks and history are the
-sidebar destinations. Client preferences use the native Settings window; each
-server has separate connection settings. Task state survives client disconnection
+The two-column Mac window lists active and historical jobs in one compact sidebar.
+Connection settings for the single server live at the bottom left; client
+preferences use the native Settings window. Task state survives client disconnection
 and service restarts; interrupted tasks require review/resume.
 
 See [QNAP installation](docs/qnap-install.md), [Mac client](desktop/README.md),

@@ -4,7 +4,7 @@
 
 A QNAP-resident service owns all media IO and durable task state. The macOS 26+ SwiftUI application is a remote controller. Quitting the Mac app never terminates an archive task. The existing CLI remains available.
 
-The Mac window puts the archive server selector at the top left, with saved connections and per-server settings in its popover. The sidebar contains active tasks and history. Global client preferences live in the native Settings window. The client connects to the archive service HTTP endpoint, not QTS or SSH. Source folder browsing always operates on the selected server filesystem; the service may run on a QNAP NAS.
+The Mac window uses two columns, with active and historical jobs grouped directly in one native sidebar. It borrows OrbStack's compact list hierarchy and quiet controls without reproducing its additional navigation column. The app presents a single archive server; connection status/settings are a small footer at the bottom left. Global client preferences live in the native Settings window. The client connects to the archive service HTTP endpoint, not QTS or SSH. Source browsing operates on the service's filesystem.
 
 Workflow: select one or more server folders -> asynchronous scan/metadata preview -> review file paths, fallback dates and collisions -> start -> live file and byte progress -> result/retry/empty-directory cleanup. Unsupported media remain in place and are reported. Cleanup uses empty-directory removal only.
 

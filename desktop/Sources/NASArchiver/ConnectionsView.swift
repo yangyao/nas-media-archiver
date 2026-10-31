@@ -1,53 +1,6 @@
 import SwiftUI
 import UserNotifications
 
-struct NASPopover: View {
-    @EnvironmentObject private var model: AppModel
-    var dismiss: () -> Void
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if let connection = model.selectedConnection {
-                HStack(spacing: 12) {
-                    Image(systemName: "server.rack").font(.title).foregroundStyle(.tint)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(connection.name).font(.headline)
-                        Label(model.connectionLabel, systemImage: model.isConnected ? "checkmark.circle.fill" : "circle.dashed")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Text(connection.address).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                if let info = model.serverInfo {
-                    LabeledContent("歸檔磁碟可用空間", value: formattedBytes(info.freeBytes)).font(.callout)
-                    LabeledContent("服務版本", value: info.version).font(.caption).foregroundStyle(.secondary)
-                }
-                Divider()
-            }
-            Text("已儲存的服務端").font(.caption.weight(.medium)).foregroundStyle(.secondary)
-            if model.connections.isEmpty { Text("還沒有新增服務端").foregroundStyle(.secondary) }
-            ForEach(model.connections) { connection in
-                Button {
-                    model.connect(connection); dismiss()
-                } label: {
-                    HStack {
-                        Image(systemName: "externaldrive")
-                        Text(connection.name)
-                        Spacer()
-                        if model.selectedConnectionID == connection.id { Image(systemName: "checkmark").foregroundStyle(.tint) }
-                    }.contentShape(Rectangle())
-                }.buttonStyle(.plain).padding(.vertical, 4)
-            }
-            Divider()
-            Button("新增服務端…", systemImage: "plus.circle") { dismiss(); model.connectionEditor = .init(connection: nil) }
-            if let connection = model.selectedConnection {
-                Button("目前服務端設定…", systemImage: "slider.horizontal.3") { dismiss(); model.connectionEditor = .init(connection: connection) }
-            }
-            SettingsLink { Label("用戶端設定…", systemImage: "gearshape") }
-        }
-        .buttonStyle(.plain)
-        .padding(22).frame(width: 320)
-    }
-}
-
 struct ConnectionEditorView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -64,12 +17,11 @@ struct ConnectionEditorView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Image(systemName: "server.rack").font(.title2).foregroundStyle(.tint)
-                Text(connection == nil ? "新增服務端" : "服務端設定").font(.title2.weight(.semibold))
+                Text("連線設定").font(.title2.weight(.semibold))
                 Spacer()
             }.padding(24)
             Form {
                 Section("連線") {
-                    TextField("名稱", text: $name, prompt: Text("我的歸檔服務"))
                     TextField("服務地址", text: $address, prompt: Text("http://192.168.2.196:8787"))
                         .autocorrectionDisabled()
                     SecureField("連線權杖", text: $token)
@@ -81,7 +33,7 @@ struct ConnectionEditorView: View {
                     }
                 }
                 if connection?.id == model.selectedConnectionID, let info = model.serverInfo {
-                    Section("服務信息") {
+                    Section("服務資訊") {
                         LabeledContent("歸檔根目錄", value: info.archiveBase).textSelection(.enabled)
                         LabeledContent("分類規則", value: "照片 / PNG / 影片 · 年 / 月")
                         LabeledContent("服務版本", value: info.version)
@@ -164,17 +116,16 @@ struct ClientSettingsView: View {
             }.formStyle(.grouped).tabItem { Label("通用", systemImage: "gearshape") }
             VStack(alignment: .leading, spacing: 16) {
                 Text("服務端連線").font(.headline)
-                Text("在主窗口左上角切換服務端，或修改目前服務端的連線設定。")
+                Text("點擊主視窗左下角的設定，即可修改歸檔服務的連線地址與權杖。")
                     .foregroundStyle(.secondary)
-                ForEach(model.connections) { connection in
-                    HStack {
-                        Label(connection.name, systemImage: "server.rack")
-                        Spacer()
-                        Text(connection.address).foregroundStyle(.secondary).font(.caption)
-                    }
+                if let connection = model.selectedConnection {
+                    LabeledContent("服務地址", value: connection.address).font(.callout)
+                    LabeledContent("狀態", value: model.connectionLabel).font(.callout)
+                } else {
+                    Text("尚未設定連線").font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
-            }.padding(24).tabItem { Label("連線", systemImage: "externaldrive.connected.to.line.below") }
+            }.padding(24).tabItem { Label("連線", systemImage: "network") }
         }
         .frame(width: 560, height: 300)
         .padding(12)

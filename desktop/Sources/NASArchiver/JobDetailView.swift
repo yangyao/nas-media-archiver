@@ -7,24 +7,23 @@ struct JobDetailView: View {
     @State private var files: [ArchiveFile] = []
     @State private var totalFiles = 0
     @State private var loadingFiles = false
+    @State private var headerHeight: CGFloat = 260
     @State private var fileError: String?
     @State private var fileLoadTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 16) {
                     HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(job.name).font(.largeTitle.weight(.semibold)).textSelection(.enabled)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(job.name).font(.title2.weight(.semibold)).textSelection(.enabled)
                             if let range = job.dateRangeLabel { Text(range).font(.callout).foregroundStyle(.secondary) }
                             Label(job.statusLabel, systemImage: statusIcon)
-                                .font(.callout.weight(.medium)).foregroundStyle(job.failedFiles > 0 ? Color.orange : Color.accentColor)
+                                .font(.callout.weight(.medium)).foregroundStyle(job.failedFiles > 0 ? Color.orange : (job.status == "running" ? Color.accentColor : Color.secondary))
                         }
                         Spacer()
-                        actionButtons
-                            .padding(6)
-                            .glassEffect(.regular, in: .capsule)
+                        actionButtons.controlSize(.small)
                     }
                     if job.status == "scanning" {
                         HStack(spacing: 14) {
@@ -34,16 +33,16 @@ struct JobDetailView: View {
                                 Text("已發現 \(job.totalFiles) 個檔案。掃描完成後可檢查預覽並開始歸檔。")
                                     .font(.callout).foregroundStyle(.secondary)
                             }
-                        }.padding(18).frame(maxWidth: .infinity, alignment: .leading).background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
+                        }.padding(.vertical, 6).frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         VStack(alignment: .leading, spacing: 11) {
                             HStack {
                                 Text(job.status == "ready" ? "預覽已準備好" : "\(job.completedFiles) / \(job.supportedFiles) 個檔案")
                                     .font(.headline).monospacedDigit()
                                 Spacer()
-                                if job.status != "ready" { Text(job.progress, format: .percent.precision(.fractionLength(0))).font(.title2.weight(.semibold)).monospacedDigit() }
+                                if job.status != "ready" { Text(job.progress, format: .percent.precision(.fractionLength(0))).font(.callout.weight(.medium)).monospacedDigit() }
                             }
-                            if job.status != "ready" { ProgressView(value: job.progress).tint(job.failedFiles > 0 ? Color.orange : Color.accentColor) }
+                            if job.status != "ready" && !job.isTerminal { ProgressView(value: job.progress).tint(job.failedFiles > 0 ? Color.orange : Color.accentColor) }
                             HStack {
                                 Text(job.status == "ready" ? "共 \(formattedBytes(job.totalBytes))" : "\(formattedBytes(min(job.supportedBytes, job.completedBytes + job.currentFileBytes))) / \(formattedBytes(job.supportedBytes))")
                                 Spacer()
@@ -56,7 +55,7 @@ struct JobDetailView: View {
                         }
                     }
                     if job.status == "ready" {
-                        Label("預覽不會移動檔案。開始後，檔案經 SHA-256 校驗成功纔會移除源檔案。", systemImage: "checkmark.shield")
+                        Label("開始後會移動這些檔案，校驗完成後清理來源。", systemImage: "checkmark.shield")
                             .font(.callout).foregroundStyle(.secondary)
                     }
                     if (job.unsupportedFiles ?? 0) > 0 {
@@ -70,7 +69,7 @@ struct JobDetailView: View {
                                 Text("\(job.attentionFiles) 個檔案需要關注")
                                 Spacer()
                                 Image(systemName: "chevron.right").font(.caption)
-                            }.padding(14).background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                            }.font(.callout).padding(.vertical, 3)
                         }.buttonStyle(.plain).foregroundStyle(.orange)
                     }
                     if !job.error.isEmpty { StatusBanner(message: job.error, systemImage: "exclamationmark.triangle", isError: true) }
@@ -82,16 +81,32 @@ struct JobDetailView: View {
                             Label(job.archiveBase, systemImage: "archivebox").textSelection(.enabled)
                         }.font(.caption).foregroundStyle(.secondary).padding(.top, 10)
                     }.font(.callout)
-                }.padding(26)
-            }.frame(maxHeight: 460)
+                }.padding(22)
+                    .onGeometryChange(for: CGFloat.self) { geometry in geometry.size.height } action: { height in
+                        headerHeight = height
+                    }
+            }.frame(height: min(headerHeight, 340))
             Divider()
             HStack {
-                Picker("檔案", selection: $filter) { ForEach(FileFilter.allCases) { value in Text(value.title).tag(value) } }
-                    .pickerStyle(.segmented).frame(maxWidth: 320)
+                Text("檔案").font(.headline)
+                Text("\(totalFiles)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
                 Spacer()
+                Menu {
+                    Picker("顯示檔案", selection: $filter) {
+                        ForEach(FileFilter.allCases) { value in Text(value.title).tag(value) }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                } label: {
+                    Label(filter.title, systemImage: "line.3.horizontal.decrease")
+                        .font(.callout)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
                 if loadingFiles { ProgressView().controlSize(.small) }
-                Button("刷新檔案", systemImage: "arrow.clockwise") { loadFiles(reset: true) }.labelStyle(.iconOnly).disabled(loadingFiles)
-            }.padding(.horizontal, 22).padding(.vertical, 14)
+                Button("重新整理檔案", systemImage: "arrow.clockwise") { loadFiles(reset: true) }
+                    .labelStyle(.iconOnly).buttonStyle(.plain).disabled(loadingFiles)
+            }.padding(.horizontal, 22).padding(.vertical, 10)
             if let fileError { StatusBanner(message: fileError, systemImage: "exclamationmark.triangle", isError: true) }
             if files.isEmpty && !loadingFiles {
                 ContentUnavailableView(filter == .all ? "尚無檔案" : "沒有這類檔案", systemImage: "doc.text.magnifyingglass")
@@ -165,7 +180,7 @@ struct JobDetailView: View {
                     ForEach(job.residualPaths, id: \.self) { path in Text(path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
                 }
             }
-        }.padding(15).background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+        }.padding(.vertical, 4)
     }
     private var cleanupTitle: String {
         switch job.cleanupStatus {
@@ -196,6 +211,13 @@ struct JobDetailView: View {
 
 struct FileRow: View {
     var file: ArchiveFile
+    private var attentionSummary: String {
+        if file.status == "unsupported" { return "保留在來源目錄" }
+        if file.metadataSource == "mtime" { return "使用檔案修改日期" }
+        if file.warning.localizedCaseInsensitiveContains("suffix") { return "同名檔案會另存" }
+        return "歸檔資訊需要確認"
+    }
+
     var body: some View {
         DisclosureGroup {
             VStack(alignment: .leading, spacing: 9) {
@@ -213,7 +235,7 @@ struct FileRow: View {
                     .foregroundStyle(file.status == "failed" ? Color.red : Color.secondary)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(file.name).lineLimit(1)
-                    if !file.warning.isEmpty { Text(file.warning).font(.caption).foregroundStyle(.orange).lineLimit(1) }
+                    if !file.warning.isEmpty { Text(attentionSummary).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                     if !file.error.isEmpty { Text(file.error).font(.caption).foregroundStyle(.red).lineLimit(1) }
                 }
                 Spacer(minLength: 8)

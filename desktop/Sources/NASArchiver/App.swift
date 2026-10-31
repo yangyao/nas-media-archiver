@@ -10,11 +10,11 @@ struct NASArchiverApp: App {
             ContentView()
                 .environmentObject(model)
                 .preferredColorScheme(appearance == "light" ? .light : (appearance == "dark" ? .dark : nil))
-                .frame(minWidth: 1000, minHeight: 680)
+                .frame(minWidth: 860, minHeight: 620)
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)
-        .defaultSize(width: 1220, height: 800)
+        .defaultSize(width: 1080, height: 760)
         .commands {
             CommandGroup(after: .newItem) {
                 Button("新增歸檔…") { model.showNewArchive = true }
