@@ -7,6 +7,11 @@ pkg_check_requirement() {
 }
 
 pkg_pre_install() {
+    # QDK/firmware versions differ on their fresh-install Enable default.
+    # Force a new package to stay stopped until its paths/port are configured.
+    if [ ! -f "$SYS_QPKG_DIR/bin/archive" ]; then
+        SYS_QPKG_SERVICE_ENABLED="FALSE"
+    fi
     # QDK itself ignores the service stop command's exit status. Refuse to
     # replace the executable while a long-running file is still finishing.
     if [ -x "$SYS_QPKG_DIR/NASMediaArchiver.sh" ] &&

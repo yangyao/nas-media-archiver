@@ -23,6 +23,14 @@ printf '#!/bin/sh\nexit 0\n' > "$SYS_QPKG_DIR/bin/archive"
 err_log() { echo "$*" >&2; exit 1; }
 log() { :; }
 . "$SCRIPT_DIR/package_routines"
+mv "$SYS_QPKG_DIR/bin/archive" "$WORK/saved-binary"
+SYS_QPKG_SERVICE_ENABLED="TRUE"
+pkg_pre_install
+[ "$SYS_QPKG_SERVICE_ENABLED" = "FALSE" ]
+mv "$WORK/saved-binary" "$SYS_QPKG_DIR/bin/archive"
+SYS_QPKG_SERVICE_ENABLED="TRUE"
+pkg_pre_install
+[ "$SYS_QPKG_SERVICE_ENABLED" = "TRUE" ]
 pkg_post_install
 DATA_DIR="$WORK/volume/.nas-media-archiver"
 test -f "$DATA_DIR/service.conf"
