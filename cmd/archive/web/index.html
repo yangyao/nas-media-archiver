@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NAS Archiver</title>
+<style>
+body{font:16px system-ui;margin:60px auto;padding:24px;max-width:780px;background:#f6f7fa;color:#162235}
+h1{font-size:32px}
+section{padding:24px;border-radius:18px;background:white;margin:20px 0}
+input{padding:12px;border:1px solid #ccd2dc;border-radius:8px;width:65%}
+button{padding:12px;background:#2166d1;color:white;border:0;border-radius:8px;cursor:pointer}
+pre{white-space:pre-wrap;overflow-wrap:anywhere}
+small{color:#526077}
+</style>
+<h1>NAS Archiver</h1>
+<p>Your archive service is running. Connect with the native Mac app to browse folders and manage archive tasks.</p>
+<section>
+<h2>Service status</h2>
+<p>Enter the archive service token from the server configuration. This is not a QTS or SSH credential.</p>
+<input id="token" type="password" placeholder="Archive service token" autocomplete="off">
+<button id="connect">Connect</button>
+<p id="status" role="status">
+</p>
+<pre id="details">
+</pre>
+</section>
+<small>The token stays in this page's memory and is not stored in your browser.</small>
+<script>document.getElementById('connect').onclick=async()=>{const status=document.getElementById('status'),details=document.getElementById('details');status.textContent='Connecting…';details.textContent='';try{const headers={Authorization:'Bearer '+document.getElementById('token').value.trim()};const response=await fetch('/api/v1/info',{headers});const info=await response.json();if(!response.ok)throw Error(info.error?.message||'Connection failed');const jobsResponse=await fetch('/api/v1/jobs',{headers});if(!jobsResponse.ok)throw Error('Cannot load tasks');const jobs=await jobsResponse.json();status.textContent='Connected to '+info.name;details.textContent='Version: '+info.version+'\nArchive: '+info.archiveBase+'\nFree space: '+(info.freeBytes/1073741824).toFixed(1)+' GiB\nTasks: '+jobs.length+'\n\n'+jobs.map(j=>j.name+' — '+j.status+' ('+j.completedFiles+'/'+j.totalFiles+')').join('\n')}catch(error){status.textContent=error.message}}</script>
+</html>

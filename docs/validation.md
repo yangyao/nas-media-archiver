@@ -7,7 +7,7 @@ Validated on 2026-10-31 using Go 1.20.5 and Xcode 27.1 / Swift 6.4 on an Apple S
 - `go test -race ./...`: CLI preview-to-run regression, authentication, allowed-root/symlink containment, duplicate preservation, unsupported residuals, state-directory locking, incomplete scan recovery, published-file corruption/recovery, retry journal preservation, job claim checks, queued pause/resume, and active pause at a verified file boundary.
 - `go vet ./...` and `git diff --check`: passed.
 - `make smoke`: a real local HTTP service exercised auth, directory browsing, async preview, SSE, archive, SHA-256 records, no-overwrite collisions, unsupported-file preservation and empty-directory cleanup.
-- `swift test --package-path desktop`: thirteen native-client tests passed, covering URL/auth/error handling, progress, unsupported files, partial scans, fragmented UTF-8/CRLF SSE framing and a connected stream without job events.
+- `swift test --package-path apps/macos`: thirteen native-client tests passed, covering URL/auth/error handling, progress, unsupported files, partial scans, fragmented UTF-8/CRLF SSE framing and a connected stream without job events.
 - `packaging/qnap/test.sh`: shell syntax, architecture metadata and install/upgrade data-preservation guards passed.
 
 ## Runtime checks
@@ -20,7 +20,7 @@ A real QPKG was built on the QNAP using a pinned official QDK checkout in a buil
 
 ## Artifacts and release limits
 
-- `desktop/dist/NASArchiver.app`: macOS 26+, host architecture ARM64, ad-hoc signed and signature verified.
+- `apps/macos/dist/NASArchiver.app`: macOS 26+, host architecture ARM64, ad-hoc signed and signature verified.
 - `dist/NASArchiver_0.2.0_macos-arm64.zip`: ZIP of the app bundle.
 - `dist/qnap/NASMediaArchiver_0.2.0_arm_64.qpkg`: real QDK-generated development installer.
 - `dist/qnap/SHA256SUMS`: current QPKG checksum.
@@ -82,7 +82,7 @@ started. A native URLSession/APIClient probe using saved local credentials also
 successfully decoded the running 0.2.2 server and enabled option.
 
 Final client tests: 17 passed. The 0.2.2 app bundle and ZIP are available under
-`desktop/dist` and `dist`; the real QDK installer is under `dist/qnap-0.2.2` and
+`apps/macos/dist` and `dist`; the real QDK installer is under `dist/qnap-0.2.2` and
 was uploaded to the NAS home installers directory.
 
 ## Version 0.2.3 task UI and review
@@ -111,7 +111,7 @@ or alter the real task's seven attention records.
   `.stfolder` marker directory, all visible in the native browser.
 - Native UI screenshots verified the final compact header, attention filter,
   explanatory file disclosures and actual residual/system-folder navigation.
-- Built-in image_gen created `desktop/Assets/AppIcon.png`; its exact prompt is
+- Built-in image_gen created `apps/macos/Assets/AppIcon.png`; its exact prompt is
   stored beside it. Packaging builds all ten ICNS renditions and registers
   `CFBundleIconFile`. No image-generation service is needed during packaging.
 - macOS logs showed `Local network prohibited` after replacing an ad hoc build.
@@ -163,3 +163,16 @@ against the local ARM64 binary digest. The real empty `iphonexs` task remained
 ready/unstarted with zero files. Native UI inspection showed only the prominent
 rescan action (no archive-start action), and clicking it refreshed the same job
 without any transfer. Empty task status is presented as “等待檔案”.
+
+## Repository layout consolidation
+
+Go sources and tests moved to `cmd/archive/` under the existing root module;
+the independent Swift package moved to `apps/macos/`. Build targets, ignore
+rules and current documentation use the new locations. The service landing page
+is now an embedded HTML file under `cmd/archive/web/`, with unchanged behavior.
+The NAS executable name, service API, configuration and state paths are unchanged.
+
+Validation after the move: Go race tests/vet, local/Linux ARM64/Linux ARMv7 builds,
+real-process HTTP smoke checks, all 20 Swift tests, Mac app packaging/signature
+checks, and QNAP lifecycle tests/staging. No production NAS restart is needed for
+this source-layout change.

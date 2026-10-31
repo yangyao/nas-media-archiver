@@ -3,12 +3,12 @@
 Native SwiftUI client for the QNAP archiver service. Requires macOS 26 or newer and Xcode 26+ / Swift 6. Uses the native split-view toolbar and Liquid Glass controls; no web view or frontend runtime.
 
 ```sh
-swift test --package-path desktop
-desktop/scripts/package-macos.sh
-open desktop/dist/NASArchiver.app
+swift test --package-path apps/macos
+apps/macos/scripts/package-macos.sh
+open apps/macos/dist/NASArchiver.app
 ```
 
-Copy the resulting `NASArchiver.app` to `/Applications` to install. Packaging produces an ad-hoc signed local build. Set `CODE_SIGN_IDENTITY` to a Developer ID identity for your own distribution; notarization is a separate release step. The default build targets the host architecture.
+Copy the resulting `NASArchiver.app` to `/Applications` to install. Packaging prefers an available Apple-issued signing identity, with ad-hoc signing as a CI fallback. Set `CODE_SIGN_IDENTITY` to choose a specific identity for distribution; notarization is a separate release step. The default build targets the host architecture.
 
 ## First connection
 

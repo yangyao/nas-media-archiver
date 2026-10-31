@@ -85,6 +85,9 @@ def main():
                         if process.poll() is not None or time.monotonic() >= deadline:
                             raise RuntimeError('Service did not become healthy')
                         time.sleep(.1)
+                with opener.open(base + '/', timeout=5) as landing:
+                    assert landing.headers.get_content_type() == 'text/html'
+                    assert b'NAS Archiver' in landing.read(), 'Embedded status page missing'
                 rejected('GET', '/api/v1/info', auth=False)
                 info = request('GET', '/api/v1/info')
                 assert info['name'] == 'Smoke NAS', info

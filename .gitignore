@@ -6,8 +6,8 @@
 /*.csv
 /*.json
 /*.jsonl
-/desktop/.build/
-/desktop/.swiftpm/
-/desktop/dist/
+/apps/macos/.build/
+/apps/macos/.swiftpm/
+/apps/macos/dist/
 /scripts/__pycache__/
 /packaging/qnap/build/

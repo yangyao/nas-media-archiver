@@ -10,9 +10,9 @@ First-run flow: authenticated connection -> if the server has no tasks, a dismis
 
 ## Boundaries
 
-- `archive.go`: existing CLI and metadata/file helpers.
-- `server*.go` / `service*.go`: authenticated API, SQLite job store, worker queue, asynchronous progress checkpoints, verified copy pipeline and SSE.
-- `desktop/`: Swift package, native views, URLSession API, app-local connection passwords and macOS app packaging.
+- `cmd/archive/archive.go`: existing CLI and metadata/file helpers.
+- `cmd/archive/server.go` / `cmd/archive/service_*.go`: authenticated API, SQLite job store, worker queue, asynchronous progress checkpoints, verified copy pipeline and SSE.
+- `apps/macos/`: Swift package, native views, URLSession API, app-local connection passwords and macOS app packaging.
 - `packaging/qnap/`: QDK configuration and QPKG service lifecycle.
 - `docs/service-api.md`: shared API contract.
 

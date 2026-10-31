@@ -1,8 +1,8 @@
 APP=archive
-CLI_PKG=.
+CLI_PKG=./cmd/archive
 DIST=dist
 
-.PHONY: build build-linux-arm64 build-linux-arm7 test smoke macos qnap-stage qnap-package clean
+.PHONY: build build-linux-arm64 build-linux-arm7 test smoke macos qnap-stage qnap-package test-macos clean
 
 build:
 	mkdir -p $(DIST)
@@ -22,8 +22,11 @@ test:
 smoke: build
 	python3 scripts/smoke-service.py --binary $(DIST)/$(APP)
 
+test-macos:
+	swift test --package-path apps/macos
+
 macos:
-	cd desktop && ./scripts/package-macos.sh
+	cd apps/macos && ./scripts/package-macos.sh
 
 qnap-stage: build-linux-arm64
 	packaging/qnap/build.sh --stage-only

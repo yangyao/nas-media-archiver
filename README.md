@@ -8,32 +8,43 @@ stop an archive task.
 It is designed for NAS workflows first, especially QNAP-style environments, but
 it can also run on a regular Linux host.
 
+## Repository layout
+
+```text
+cmd/archive/          Go CLI + HTTP service (single NAS executable)
+  web/                Embedded service status page
+apps/macos/           Native SwiftUI client, tests, icon and app packaging
+packaging/qnap/       QPKG lifecycle scripts and installer builds
+scripts/              Service integration checks
+docs/                API, architecture, usage and validation
+```
+
+See [repository architecture](docs/repository-layout.md) for module boundaries
+and the future `apps/web/` integration path. Go dependencies stay in the root
+module; the Mac app has its own Swift package.
+
 ## Features
 
 - Archives files into `photos/YYYY/MM`, `videos/YYYY/MM`, and `pngs/YYYY/MM`
 - Uses `YYYYMMDD_HHMMSS_size.ext` naming
-- Preserves duplicate files safely
+- Optionally skips byte-identical archive candidates while retaining the source; distinct collisions use suffixes
 - Supports `scan`, `run`, `status`, `watch`, `files`, `retry`, and `export`
 - Supports `--dry-run` before a real archive run (the same job can then be run for real)
 - Excludes NAS thumbnail directories (`.@__thumb`, `@eaDir`)
-- Stores per-job state as `job.json` and `events.jsonl`
+- CLI stores per-job state as `job.json` and `events.jsonl`; the service uses in-memory state and bounded SQLite checkpoints
 - Handles cross-filesystem moves with copy-then-rename fallback and SHA-256 verification before source deletion
 
 ## Supported file types
 
-- Photos: `jpg`, `jpeg`, `heic`, `webp`
+- Photos: `jpg`, `jpeg`, `heic`, `webp`, `gif`
 - Videos: `mp4`, `mov`, `3gp`
 - Images: `png` (ExifTool metadata when available, otherwise mtime)
-
-Current unsupported examples:
-
-- `gif`
 
 ## NAS service and Mac app
 
 The desktop workflow is: connect to an archive server, select server-side folders, scan and review the
 archive plan, start, monitor progress, then clean empty source directories.
-Duplicates are preserved with suffixes; unsupported files stay at the source.
+The Mac client defaults to skipping confirmed duplicates while retaining their sources; distinct collisions use suffixes. Unsupported files stay at the source. Empty previews can be rescanned in the same unstarted task after adding files.
 
 Build the service and run it with explicit allowed paths:
 
@@ -63,17 +74,16 @@ make smoke                 # Live HTTP integration test with disposable media
 
 The two-column Mac window lists active and historical jobs in one compact sidebar.
 Connection settings for the single server live at the bottom left; client
-preferences use the native Settings window. Task state survives client disconnection
-and service restarts; interrupted tasks require review/resume.
+preferences use the native Settings window. Task execution survives client disconnection. The service checkpoints up to 500 dirty records every two seconds; abrupt restarts can lose unflushed progress. Interrupted tasks require review/resume or rescan, reusing saved metadata for unchanged sources.
 
-See [QNAP installation](docs/qnap-install.md), [Mac client](desktop/README.md),
+See [QNAP installation](docs/qnap-install.md), [Mac client](apps/macos/README.md),
 [API contract](docs/service-api.md), [implementation plan](docs/implementation-plan.md),
 and [validation results](docs/validation.md).
 
 ## Build
 
 ```bash
-go build -o archive .
+go build -o archive ./cmd/archive
 make build-linux-arm64
 make build-linux-arm7
 ```
@@ -129,7 +139,7 @@ sudo -u admin ./archive run \
   --state-dir /path/to/archive-state
 ```
 
-## Recommended runtime settings
+## Recommended CLI runtime settings
 
 Based on current ARM QNAP benchmarks:
 

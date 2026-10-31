@@ -7,7 +7,7 @@ structure.
 ## Build
 
 ```bash
-go build -o archive .
+go build -o archive ./cmd/archive
 make build-linux-arm64
 make build-linux-arm7
 ```

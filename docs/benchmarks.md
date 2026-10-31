@@ -142,7 +142,7 @@ new incremental update:
 | 1,000 | 17.8 ms | 0.27 ms |
 | 8,000 | 1,141 ms | 2.90 ms |
 
-Run `go test -run '^$' -bench BenchmarkServiceScanState -benchtime=1x -benchmem`.
+Run `go test ./cmd/archive -run '^$' -bench BenchmarkServiceScanState -benchtime=1x -benchmem`.
 These are single-iteration diagnostics of the statistics algorithm, not an
 end-to-end NAS speedup claim. Incremental bookkeeping uses additional memory.
 
