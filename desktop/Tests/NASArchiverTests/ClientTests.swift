@@ -64,6 +64,24 @@ final class ClientTests: XCTestCase {
         XCTAssertEqual(contents.entries[0].note, "系統目錄，保留即可")
     }
 
+    func testEmptyReadyPreviewOffersRescanInsteadOfArchive() throws {
+        var job = try JSONDecoder().decode(ArchiveJob.self, from: Data(jobFixture.utf8))
+        job.status = "ready"
+        job.totalFiles = 0; job.completedFiles = 0; job.failedFiles = 0
+        job.totalBytes = 0; job.completedBytes = 0; job.currentFileBytes = 0
+        job.started = false
+        XCTAssertFalse(job.canStart)
+        XCTAssertTrue(job.canRescan)
+        XCTAssertEqual(job.statusLabel, "等待檔案")
+        job.totalFiles = 1
+        XCTAssertTrue(job.canStart)
+        XCTAssertTrue(job.canRescan)
+        job.started = true
+        XCTAssertFalse(job.canRescan)
+        job.status = "completed"
+        XCTAssertFalse(job.canRescan)
+    }
+
     func testSameNamedRunsUseShortOrdinalsWithoutChangingNames() throws {
         let first = try JSONDecoder().decode(ArchiveJob.self, from: Data(jobFixture.utf8))
         var second = first
@@ -95,6 +113,9 @@ final class ClientTests: XCTestCase {
         XCTAssertTrue(job.needsRescan)
         XCTAssertFalse(job.canStart)
         job.scanComplete = true
+        XCTAssertFalse(job.canStart, "Unsupported-only tasks cannot start")
+        job.unsupportedFiles = 0
+        job.unsupportedBytes = 0
         XCTAssertTrue(job.canStart)
     }
 

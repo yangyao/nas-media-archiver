@@ -144,3 +144,22 @@ Repeated folder names keep their original names and receive separate short run
 badges (`#1`, `#2`); sidebar counts/status and creation-time hover hints distinguish
 runs without long dates in titles. Swift tests cover ordinal ordering independent
 of list order and existing nanosecond timestamp parsing (19 tests passed).
+
+## Version 0.2.5 empty previews and rescan
+
+Added same-job rescan for unstarted ready previews, with current-file enumeration,
+unchanged-source metadata reuse and immediate scan-completion invalidation. Empty
+previews cannot queue an archive operation and show a prominent rescan action.
+Started or completed jobs cannot discard transfer journals through rescan.
+
+Tests cover empty preview → add file → rescan without transfer, removal of stale
+preview/SQLite records after deleting a file and rescanning, state reload, and
+rejection after archiving starts. Swift tests cover empty-task button eligibility
+and preserving rescan only before execution (20 tests). The real-process smoke
+workflow verifies the public rescan endpoint and empty-start rejection.
+
+Version 0.2.5 was installed on the idle QNAP after a state backup and verified
+against the local ARM64 binary digest. The real empty `iphonexs` task remained
+ready/unstarted with zero files. Native UI inspection showed only the prominent
+rescan action (no archive-start action), and clicking it refreshed the same job
+without any transfer. Empty task status is presented as “等待檔案”.

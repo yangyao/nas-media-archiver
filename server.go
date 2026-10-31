@@ -239,7 +239,7 @@ func (s *archiveService) route(w http.ResponseWriter, r *http.Request) {
 		writeServiceJSON(w, 200, j)
 		return
 	}
-	if parts[1] != "start" && parts[1] != "pause" && parts[1] != "retry" && parts[1] != "cleanup" {
+	if parts[1] != "start" && parts[1] != "pause" && parts[1] != "retry" && parts[1] != "rescan" && parts[1] != "cleanup" {
 		serviceError(w, 404, "not_found", "Endpoint not found.")
 		return
 	}

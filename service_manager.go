@@ -92,6 +92,15 @@ func newArchiveService(config ServiceConfig) (*archiveService, error) {
 	}
 	s.config.ArchiveBase = archive
 	for _, j := range jobs {
+		if j.CompletedFiles > 0 || j.SkippedFiles > 0 || j.Status == "running" || j.Status == "pausing" || j.Status == "paused" || j.Status == "queued" || j.Status == "completed" || j.Status == "completed_with_errors" {
+			j.Started = true
+		}
+		for _, f := range j.Files {
+			if f.SHA256 != "" || f.StagingPath != "" || f.Published || f.Status == "copying" {
+				j.Started = true
+				break
+			}
+		}
 		if len(j.Files) != j.TotalFiles {
 			j.ScanComplete = false
 			j.Status = "interrupted"
@@ -382,6 +391,30 @@ func (s *archiveService) scanJob(j *ServiceJob) {
 		j.Error = "Cannot persist scan: " + err.Error()
 	}
 }
+
+// Rebuild the preview from the current directory tree, reusing only metadata
+// for unchanged source files. No scan result remains implicitly ready.
+func (s *archiveService) restartScanLocked(j *ServiceJob) (ServiceJob, error) {
+	j.scanCache = make(map[string]ServiceFile, len(j.Files))
+	for _, f := range j.Files {
+		j.scanCache[f.SourcePath] = *f
+	}
+	s.store.resetFiles(j.ID)
+	j.Files = []*ServiceFile{}
+	j.recalculate()
+	j.ScanComplete = false
+	j.Status = "scanning"
+	j.Error = ""
+	j.CurrentFile = ""
+	j.CurrentFileBytes = 0
+	if err := s.changed(j, nil); err != nil {
+		return ServiceJob{}, err
+	}
+	s.wg.Add(1)
+	go s.scanJob(j)
+	return serviceJobSnapshot(j), nil
+}
+
 func joinServiceWarning(a, b string) string {
 	if a == "" {
 		return b
@@ -477,6 +510,10 @@ func (s *archiveService) jobAction(id, action string) (ServiceJob, error) {
 		if err := s.validateExistingClaims(j, false); err != nil {
 			return ServiceJob{}, err
 		}
+		if j.TotalFiles-j.UnsupportedFiles-j.CompletedFiles-j.SkippedFiles-j.FailedFiles <= 0 {
+			return ServiceJob{}, errors.New("no files are ready to archive; rescan the directory after adding files")
+		}
+		j.Started = true
 		j.Status = "queued"
 		j.Error = ""
 	case "pause":
@@ -487,6 +524,14 @@ func (s *archiveService) jobAction(id, action string) (ServiceJob, error) {
 		} else if j.Status != "pausing" {
 			return ServiceJob{}, errors.New("task is not running or queued")
 		}
+	case "rescan":
+		if j.Status != "ready" || j.Started {
+			return ServiceJob{}, errors.New("rescan is available before archiving starts; create a new task for later batches")
+		}
+		if err := s.validateExistingClaims(j, true); err != nil {
+			return ServiceJob{}, err
+		}
+		return s.restartScanLocked(j)
 	case "retry":
 		if !serviceTerminal(j.Status) && j.Status != "interrupted" && j.Status != "paused" {
 			return ServiceJob{}, errors.New("task is still active")
@@ -495,23 +540,7 @@ func (s *archiveService) jobAction(id, action string) (ServiceJob, error) {
 			return ServiceJob{}, err
 		}
 		if !j.ScanComplete {
-			j.scanCache = make(map[string]ServiceFile, len(j.Files))
-			for _, f := range j.Files {
-				j.scanCache[f.SourcePath] = *f
-			}
-			s.store.resetFiles(j.ID)
-			j.Files = []*ServiceFile{}
-			j.recalculate()
-			j.Status = "scanning"
-			j.Error = ""
-			j.DateRangeStart = ""
-			j.DateRangeEnd = ""
-			if err := s.changed(j, nil); err != nil {
-				return ServiceJob{}, err
-			}
-			s.wg.Add(1)
-			go s.scanJob(j)
-			return serviceJobSnapshot(j), nil
+			return s.restartScanLocked(j)
 		}
 		if err := s.replanFailedLocked(j); err != nil {
 			return ServiceJob{}, err

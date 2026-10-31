@@ -89,7 +89,7 @@ struct JobDetailView: View {
                 if job.status == "scanning" {
                     Text("掃描 · \(job.totalFiles) 個 · \(formattedBytes(job.totalBytes))")
                 } else if job.status == "ready" {
-                    Text("\(job.supportedFiles) 個檔案 · \(formattedBytes(job.supportedBytes))")
+                    Text(job.supportedFiles == 0 ? "沒有可歸檔的檔案" : "\(job.supportedFiles) 個檔案 · \(formattedBytes(job.supportedBytes))")
                 } else if job.isTerminal {
                     Text("已歸檔 \(job.completedFiles) 個 · \(formattedBytes(job.completedBytes))")
                     if (job.skippedFiles ?? 0) > 0 { Text("· 略過 \(job.skippedFiles ?? 0) 個") }
@@ -154,6 +154,13 @@ struct JobDetailView: View {
             if job.needsRescan {
                 Button("重新掃描", systemImage: "arrow.clockwise") { Task { await model.perform("retry", job: job) } }
                     .buttonStyle(.glassProminent)
+            }
+            if job.canRescan {
+                if job.supportedFiles == 0 {
+                    Button("重新掃描", systemImage: "arrow.clockwise") { Task { await model.perform("rescan", job: job) } }.buttonStyle(.glassProminent)
+                } else {
+                    Button("重新掃描", systemImage: "arrow.clockwise") { Task { await model.perform("rescan", job: job) } }.buttonStyle(.glass)
+                }
             }
             if job.canStart {
                 Button(job.status == "ready" ? "開始歸檔" : "繼續", systemImage: "play.fill") {

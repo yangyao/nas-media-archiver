@@ -46,6 +46,7 @@ struct ArchiveJob: Codable, Identifiable, Equatable, Sendable {
     var unsupportedFiles: Int?
     var unsupportedBytes: Int64?
     var scanComplete: Bool?
+    var started: Bool?
     var totalBytes: Int64
     var completedBytes: Int64
     var currentFile: String
@@ -69,7 +70,8 @@ struct ArchiveJob: Codable, Identifiable, Equatable, Sendable {
     var needsRescan: Bool { status == "interrupted" && scanComplete == false }
     var supportedFiles: Int { max(0, totalFiles - (unsupportedFiles ?? 0)) }
     var supportedBytes: Int64 { max(0, totalBytes - (unsupportedBytes ?? 0)) }
-    var canStart: Bool { ["ready", "paused", "interrupted"].contains(status) && !needsRescan }
+    var canStart: Bool { ["ready", "paused", "interrupted"].contains(status) && !needsRescan && supportedFiles > processedFiles + failedFiles }
+    var canRescan: Bool { status == "ready" && !(started ?? (processedFiles > 0)) }
     var processedFiles: Int { completedFiles + (skippedFiles ?? 0) }
     var processedBytes: Int64 { completedBytes + (skippedBytes ?? 0) }
     var canPause: Bool { ["running", "queued"].contains(status) }
@@ -83,7 +85,7 @@ struct ArchiveJob: Codable, Identifiable, Equatable, Sendable {
     var statusLabel: String {
         switch status {
         case "scanning": "正在掃描"
-        case "ready": "等待開始"
+        case "ready": supportedFiles == 0 ? "等待檔案" : "等待開始"
         case "queued": "排隊中"
         case "running": "正在歸檔"
         case "pausing": "正在暫停"

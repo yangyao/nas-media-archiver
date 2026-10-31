@@ -210,7 +210,28 @@ def main():
                 acknowledged = request('POST', item_path + '/acknowledge')
                 assert acknowledged['attentionFiles'] == 0
                 assert undated.read_bytes() == fixtures['IMG_20260701_120000.jpg'], 'Date review changed original media'
-                print('PASS: archive safety, duplicates, residual inspection, path containment, manual date replanning and acknowledgement')
+                empty = sources / 'initially empty'
+                empty.mkdir()
+                empty_job = request('POST', '/api/v1/jobs', {'sourcePaths': [str(empty)], 'archiveBase': str(archive)})
+                empty_path = '/api/v1/jobs/' + empty_job['id']
+                deadline = time.monotonic() + 30
+                while empty_job['status'] == 'scanning':
+                    assert time.monotonic() < deadline
+                    time.sleep(.05)
+                    empty_job = request('GET', empty_path)
+                assert empty_job['totalFiles'] == 0 and not empty_job['started']
+                rejected('POST', empty_path + '/start')
+                added = empty / 'IMG_20260705_120000.jpg'
+                added.write_bytes(b'newly added photo')
+                rescanned = request('POST', empty_path + '/rescan')
+                assert rescanned['status'] == 'scanning' and not rescanned['scanComplete']
+                while rescanned['status'] == 'scanning':
+                    assert time.monotonic() < deadline
+                    time.sleep(.05)
+                    rescanned = request('GET', empty_path)
+                assert rescanned['totalFiles'] == 1 and rescanned['id'] == empty_job['id']
+                assert added.read_bytes() == b'newly added photo'
+                print('PASS: archive safety, duplicates, review, residual inspection and empty-preview rescan over HTTP')
             except Exception:
                 log.flush()
                 log.seek(0)

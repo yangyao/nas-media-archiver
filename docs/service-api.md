@@ -124,3 +124,18 @@ job's historical results. Names remain the source-folder basename. The Mac app
 uses separate `#1`, `#2` badges for same-named jobs, ordered by creation time;
 compact file counts and status distinguish their scopes. Creation time is in a
 hover hint, not appended to the name. Actual job IDs identify API operations.
+
+### Refreshing an unstarted preview (0.2.5)
+
+`POST /api/v1/jobs/{id}/rescan` refreshes an existing ready preview only if archive
+execution has never started. It retains the job ID/name/creation time, rebuilds
+the current file list (including additions and removals), and reuses metadata
+only for unchanged sources. The action immediately clears `scanComplete` and
+returns the scanning state; it does not transfer media. The `started` summary
+field distinguishes an untouched preview from a retried transfer. Older records
+are migrated conservatively using persisted statuses and transfer journals.
+
+Empty or unsupported-only jobs cannot start, even through the API. Their primary
+Mac action is “重新掃描”; nonempty unstarted previews offer both rescan and start.
+Already-started/completed tasks retain their journals and require a new task for
+later batches, preserving history and recovery data.
