@@ -16,6 +16,8 @@ import (
 )
 
 type archiveService struct {
+	settingsMu      sync.RWMutex
+	settings        ArchiveSettings
 	mu              sync.Mutex
 	config          ServiceConfig
 	store           *serviceStore
@@ -85,12 +87,19 @@ func newArchiveService(config ServiceConfig) (*archiveService, error) {
 		readers <- &serviceMetadataReader{}
 	}
 	s := &archiveService{metadataReaders: readers, config: config, store: store, token: token, jobs: jobs, wake: make(chan struct{}, 1), stop: make(chan struct{})}
-	archive, err := s.allowedPath(config.ArchiveBase, false)
-	if err != nil {
-		store.Close()
-		return nil, fmt.Errorf("archive base: %w", err)
+	archive := ""
+	if config.ArchiveBase != "" {
+		archive, err = s.allowedPath(config.ArchiveBase, false)
+		if err != nil {
+			store.Close()
+			return nil, fmt.Errorf("archive base: %w", err)
+		}
 	}
 	s.config.ArchiveBase = archive
+	if err = s.loadSettings(); err != nil {
+		store.Close()
+		return nil, err
+	}
 	for _, j := range jobs {
 		if j.CompletedFiles > 0 || j.SkippedFiles > 0 || j.Status == "running" || j.Status == "pausing" || j.Status == "paused" || j.Status == "queued" || j.Status == "completed" || j.Status == "completed_with_errors" {
 			j.Started = true
@@ -195,8 +204,24 @@ func (s *archiveService) createJobWithOptions(sources []string, base string, cle
 	if s.closing {
 		return ServiceJob{}, errors.New("service is shutting down")
 	}
+	settings := s.settingsSnapshot()
+	if !settings.Configured {
+		return ServiceJob{}, errors.New("请先完成归档设置")
+	}
+	for _, source := range sources {
+		p, e := s.allowedPath(source, true)
+		ok := false
+		for _, root := range settings.SourceRoots {
+			if pathWithin(p, root) {
+				ok = true
+			}
+		}
+		if e != nil || !ok {
+			return ServiceJob{}, errors.New("来源不在配置的来源目录内")
+		}
+	}
 	if base == "" {
-		base = s.config.ArchiveBase
+		base = settings.ArchiveBase
 	}
 	paths, target, err := s.validateJobPaths(sources, base)
 	if err != nil {

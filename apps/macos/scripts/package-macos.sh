@@ -29,8 +29,8 @@ cat > "$APP_PATH/Contents/Info.plist" <<'PLIST'
     <key>CFBundleDisplayName</key><string>NAS Archiver</string>
     <key>CFBundleExecutable</key><string>NASArchiver</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.2.6</string>
-    <key>CFBundleVersion</key><string>7</string>
+    <key>CFBundleShortVersionString</key><string>0.2.7</string>
+    <key>CFBundleVersion</key><string>8</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>LSMinimumSystemVersion</key><string>26.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>

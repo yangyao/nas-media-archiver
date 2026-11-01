@@ -33,6 +33,10 @@ struct ContentView: View {
                 }
                 if let job = model.selectedJob {
                     JobDetailView(job: job).id(job.id)
+                } else if model.isConnected && model.serverInfo?.isConfigured == false {
+                    Button("设置归档目录", systemImage: "folder.badge.gearshape") { model.showArchiveSettings = true }
+                        .buttonStyle(.glassProminent)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if model.selectedConnection == nil {
                     Button("连接服务", systemImage: "link") { editConnection() }
                         .buttonStyle(.glassProminent)
@@ -48,13 +52,16 @@ struct ContentView: View {
                 Button("新建归档", systemImage: "plus") { model.showNewArchive = true }
                     .labelStyle(.iconOnly)
                     .help("新建归档（⌘N）")
-                    .disabled(!model.isConnected)
+                    .disabled(!model.canCreateArchive)
             }
         }
         .toolbar(removing: .title)
         .sheet(item: $model.connectionEditor, onDismiss: model.presentArchiveOnboardingIfNeeded) { target in
             ConnectionEditorView(connection: target.connection).environmentObject(model)
         }
+        .sheet(isPresented: $model.showArchiveSettings, onDismiss: {
+            if model.canCreateArchive { model.presentArchiveOnboardingIfNeeded() }
+        }) { ArchiveSettingsView().environmentObject(model) }
         .sheet(isPresented: $model.showNewArchive) {
             NewArchiveView().environmentObject(model)
         }

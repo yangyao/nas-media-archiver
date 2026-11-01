@@ -17,6 +17,8 @@ final class AppModel: ObservableObject {
     @Published var updatesMessage: String?
     @Published var connectionEditor: ConnectionEditorTarget?
     @Published var showNewArchive = false
+    @Published var showArchiveSettings = false
+    var canCreateArchive: Bool { isConnected && serverInfo?.isConfigured == true }
 
     private let defaults: UserDefaults
     private let session: URLSession
@@ -27,10 +29,11 @@ final class AppModel: ObservableObject {
     private let pollingMessage = "即时连接正在重连，每 3 秒更新任务。"
     private var selectedJobForConnection: [UUID: String] = [:]
     private var offeredArchiveOnboarding: Set<UUID> = []
+    private var offeredSettingsOnboarding: Set<UUID> = []
 
     var selectedConnection: NASConnection? { connections.first { $0.id == selectedConnectionID } }
     var selectedJob: ArchiveJob? { jobs.first { $0.id == selectedJobID } }
-    var needsArchiveOnboarding: Bool { isConnected && jobs.isEmpty }
+    var needsArchiveOnboarding: Bool { canCreateArchive && jobs.isEmpty }
     var connectionLabel: String { isConnecting ? "正在连接" : (isConnected ? "已连接" : "未连接") }
 
     init(defaults: UserDefaults = .standard, session: URLSession = .shared) {
@@ -129,6 +132,14 @@ final class AppModel: ObservableObject {
     }
 
     func presentArchiveOnboardingIfNeeded() {
+        if isConnected && serverInfo?.isConfigured == false {
+            if connectionEditor == nil, let id = selectedConnectionID, !offeredSettingsOnboarding.contains(id) {
+                offeredSettingsOnboarding.insert(id)
+                showArchiveSettings = true
+            }
+            return
+        }
+        guard !showArchiveSettings else { return }
         // A connection editor may still be finishing its dismissal transition.
         // ContentView calls again from onDismiss, so two sheets never compete.
         guard needsArchiveOnboarding, connectionEditor == nil, !showNewArchive,

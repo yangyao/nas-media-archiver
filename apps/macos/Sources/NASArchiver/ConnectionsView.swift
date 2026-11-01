@@ -13,6 +13,7 @@ struct ConnectionEditorView: View {
     @State private var testing = false
     @State private var saving = false
     @State private var testResult: String?
+    @State private var showArchiveSettings = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -38,8 +39,7 @@ struct ConnectionEditorView: View {
                         LabeledContent("分类规则", value: "照片 / PNG / 视频 · 年 / 月")
                         LabeledContent("服务版本", value: info.version)
                         LabeledContent("可用空间", value: formattedBytes(info.freeBytes))
-                        Text("归档规则由服务端管理；新建任务时可选择归档位置。")
-                            .font(.caption).foregroundStyle(.secondary)
+                        Button("归档目录设置…") { showArchiveSettings = true }
                     }
                 }
                 if let error { Text(error).foregroundStyle(.red).font(.callout).textSelection(.enabled) }
@@ -60,6 +60,7 @@ struct ConnectionEditorView: View {
             }.padding(20)
         }
         .frame(width: 580, height: connection == nil ? 460 : 620)
+        .sheet(isPresented: $showArchiveSettings) { ArchiveSettingsView().environmentObject(model) }
         .interactiveDismissDisabled(!model.isConnected || saving)
         .onAppear {
             if let connection {
@@ -101,6 +102,7 @@ struct ClientSettingsView: View {
     @AppStorage("appearance") private var appearance = "system"
     @AppStorage("completionNotifications") private var completionNotifications = false
     @State private var notificationError: String?
+    @State private var showArchiveSettings = false
     var body: some View {
         TabView {
             Form {
@@ -120,6 +122,7 @@ struct ClientSettingsView: View {
                         }
                     }
                 if let notificationError { Text(notificationError).font(.caption).foregroundStyle(.orange) }
+                Button("归档目录设置…") { showArchiveSettings = true }.disabled(!model.isConnected)
                 Text("退出 Mac 应用后，服务端上的归档任务仍会继续。")
                     .font(.caption).foregroundStyle(.secondary)
             }.formStyle(.grouped).tabItem { Label("通用", systemImage: "gearshape") }
@@ -136,7 +139,8 @@ struct ClientSettingsView: View {
                 Spacer()
             }.padding(24).tabItem { Label("连接", systemImage: "network") }
         }
-        .frame(width: 560, height: 300)
+        .sheet(isPresented: $showArchiveSettings) { ArchiveSettingsView().environmentObject(model) }
+        .frame(width: 560, height: 340)
         .padding(12)
     }
 }

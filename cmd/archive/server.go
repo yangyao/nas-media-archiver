@@ -27,7 +27,7 @@ func runServe(args []string) error {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	listen := flags.String("listen", "127.0.0.1:8787", "HTTP listen address")
 	state := flags.String("state-dir", ".archive-service", "persistent service data directory")
-	archive := flags.String("archive-base", "/share/archive", "default archive root")
+	archive := flags.String("archive-base", "", "default archive root")
 	roots := flags.String("roots", "/share", "comma-separated allowed filesystem roots")
 	tokenFile := flags.String("token-file", "", "bearer token file; generated with mode 0600 if absent")
 	name := flags.String("name", "NAS Archiver", "display name")
@@ -115,6 +115,9 @@ func serviceError(w http.ResponseWriter, status int, code, message string) {
 func (s *archiveService) route(w http.ResponseWriter, r *http.Request) {
 	endpoint := strings.TrimPrefix(r.URL.Path, "/api/v1/")
 	switch endpoint {
+	case "settings":
+		s.settingsEndpoint(w, r)
+		return
 	case "info":
 		if r.Method != "GET" {
 			serviceError(w, 405, "method_not_allowed", "Use GET.")
@@ -272,7 +275,11 @@ func (s *archiveService) info(w http.ResponseWriter) {
 		}
 		tools[name] = err == nil
 	}
-	path := s.config.ArchiveBase
+	settings := s.settingsSnapshot()
+	path := settings.ArchiveBase
+	if path == "" {
+		path = s.config.StateDir
+	}
 	var stat syscall.Statfs_t
 	for {
 		if err := syscall.Statfs(path, &stat); err == nil {
@@ -285,7 +292,7 @@ func (s *archiveService) info(w http.ResponseWriter) {
 		path = parent
 	}
 	free := int64(stat.Bavail) * int64(stat.Bsize)
-	writeServiceJSON(w, 200, map[string]interface{}{"name": s.config.Name, "version": serviceVersion, "archiveBase": s.config.ArchiveBase, "roots": s.config.Roots, "freeBytes": free, "tools": tools, "persistence": s.store.status()})
+	writeServiceJSON(w, 200, map[string]interface{}{"name": s.config.Name, "version": serviceVersion, "configured": settings.Configured, "archiveBase": settings.ArchiveBase, "roots": s.config.Roots, "freeBytes": free, "tools": tools, "persistence": s.store.status()})
 }
 
 // Source browsing is a view of the configured access roots, not a broader
@@ -296,7 +303,15 @@ func (s *archiveService) browse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sourceOnly := r.URL.Query().Get("purpose") == "source"
-	excluded := []string{s.config.ArchiveBase, s.config.StateDir}
+	settings := s.settingsSnapshot()
+	excluded := []string{s.config.StateDir}
+	if settings.ArchiveBase != "" {
+		excluded = append(excluded, settings.ArchiveBase)
+	}
+	roots := s.config.Roots
+	if sourceOnly {
+		roots = settings.SourceRoots
+	}
 	if sourceOnly && r.URL.Query().Get("archiveBase") != "" {
 		target, err := s.allowedPath(r.URL.Query().Get("archiveBase"), false)
 		if err != nil {
@@ -339,7 +354,7 @@ func (s *archiveService) browse(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 	var parent *string
 	if path == "" {
-		for _, root := range s.config.Roots {
+		for _, root := range roots {
 			if !hidden(root) {
 				entries = append(entries, entry{filepath.Base(root), root, selectable(root)})
 			}
@@ -353,6 +368,18 @@ func (s *archiveService) browse(w http.ResponseWriter, r *http.Request) {
 		if hidden(resolved) {
 			serviceError(w, 403, "invalid_source", "Archive and service state directories cannot be selected as sources.")
 			return
+		}
+		if sourceOnly {
+			permitted := false
+			for _, root := range roots {
+				if pathWithin(resolved, root) {
+					permitted = true
+				}
+			}
+			if !permitted {
+				serviceError(w, 403, "invalid_source", "请选择配置的来源目录。")
+				return
+			}
 		}
 		path = resolved
 		list, err := os.ReadDir(path)
@@ -375,7 +402,15 @@ func (s *archiveService) browse(w http.ResponseWriter, r *http.Request) {
 		candidate := filepath.Dir(path)
 		if candidate != path {
 			if p, e := s.allowedPath(candidate, true); e == nil && !hidden(p) {
-				parent = &p
+				permitted := !sourceOnly
+				for _, root := range roots {
+					if pathWithin(p, root) {
+						permitted = true
+					}
+				}
+				if permitted {
+					parent = &p
+				}
 			}
 		}
 	}

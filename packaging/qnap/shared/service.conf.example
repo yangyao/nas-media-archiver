@@ -3,6 +3,6 @@
 # Shell syntax; keep values quoted. Never add a token or password here.
 LISTEN="0.0.0.0:8787"
 NAME="My Archive Server"
-ARCHIVE_BASE="/share/archive"
-ROOTS="/share/ssd/upload,/share/archive"
+ARCHIVE_BASE=""
+ROOTS="/share"
 STOP_TIMEOUT="120"

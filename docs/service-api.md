@@ -160,3 +160,17 @@ not just a source preference; it must still include the archive write location.
 
 App strings, menus and bundle localization now use Simplified Chinese. User-owned
 folder names, job names and diagnostic paths are not converted.
+
+### 服务端归档设置（0.2.7）
+
+`GET /api/v1/settings` 返回 `configured`、`sourceRoots`、`archiveBase`。
+`PUT /api/v1/settings` 接受相同结构（`configured` 由服务端设为 true）。
+需要现有 Bearer Token。来源和目标必须是管理员 `ROOTS` 范围内现有目录，
+来源互不重叠，且不与目标或服务数据目录重叠；归档位置必须可写。
+扫描、排队或归档期间返回 409。保存为 state-dir/settings.json（0600，原子替换），
+重启后优先读取；不修改管理员的 ROOTS，也不修改已有任务路径。
+
+`GET /info` 新增 `configured`。新安装默认未配置，仍可连接和浏览允许的目录，
+创建任务需先完成设置。旧安装的非空 archive-base 作为已有配置保留。
+QNAP 新安装的 ROOTS 默认 /share，archive-base 留空；管理员可缩小 ROOTS。
+Mac 连接只需地址与 Token，首次配置及后续修改均在客户端完成。

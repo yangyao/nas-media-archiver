@@ -55,6 +55,10 @@ struct APIClient: Sendable {
         return try JSONDecoder().decode(type, from: data)
     }
 
+    func archiveSettings() async throws -> ArchiveSettings { try await fetch(ArchiveSettings.self, path: "settings") }
+    func saveArchiveSettings(_ value: ArchiveSettings) async throws -> ArchiveSettings {
+        try await fetch(ArchiveSettings.self, path: "settings", method: "PUT", body: JSONEncoder().encode(value))
+    }
     func info() async throws -> ServerInfo { try await fetch(ServerInfo.self, path: "info") }
     func jobs() async throws -> [ArchiveJob] { try await fetch([ArchiveJob].self, path: "jobs") }
     func browse(_ path: String) async throws -> DirectoryListing { try await fetch(DirectoryListing.self, path: "browse", query: [.init(name: "path", value: path)]) }

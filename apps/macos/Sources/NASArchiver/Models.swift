@@ -7,6 +7,8 @@ struct NASConnection: Codable, Identifiable, Equatable, Sendable {
 }
 
 struct ServerInfo: Codable, Sendable {
+    var configured: Bool?
+    var isConfigured: Bool { configured ?? !archiveBase.isEmpty }
     var name: String
     var version: String
     var archiveBase: String

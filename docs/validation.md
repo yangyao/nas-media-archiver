@@ -205,3 +205,12 @@ friendly `/share/archive` destination, and absence of `archive` in the home
 source list. Manually browsing the archive destination produced a Chinese
 rejection message, and the picker was restored to upload without creating or
 starting any task.
+
+## 0.2.7 — 客户端配置服务端归档目录
+
+Go race tests、vet、HTTP smoke 及 QNAP 打包检查通过。新增测试覆盖首次未配置、
+目录越界/重叠、任务执行时拒绝修改、0600 配置持久化和重启恢复。
+Mac 22 项测试通过，覆盖未配置时先显示设置、不与连接弹窗竞争、取消后刷新不重开。
+已在空闲 NAS 安装 0.2.7，核对 API/注册版本及 ARM64 二进制摘要；
+保留旧来源和归档目录。通过真实 Mac 界面读取并保存相同配置，核对服务端返回值；
+未创建或运行归档任务。升级前备份 state，现有三个任务状态保持不变。

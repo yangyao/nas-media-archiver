@@ -24,8 +24,8 @@ BINARY="$PACKAGE_DIR/bin/archive"
 
 LISTEN="0.0.0.0:8787"
 NAME="My Archive Server"
-ARCHIVE_BASE="/share/archive"
-ROOTS="/share/ssd/upload,/share/archive"
+ARCHIVE_BASE=""
+ROOTS="/share"
 STOP_TIMEOUT="120"
 if [ -f "$CONFIG_FILE" ]; then
     # Administrator-owned configuration only; no user-supplied shell fragments.
@@ -65,7 +65,7 @@ start_service() {
     fi
     [ -x "$BINARY" ] || { echo "Missing executable: $BINARY" >&2; return 1; }
     [ -f "$CONFIG_FILE" ] || { echo "Missing configuration: $CONFIG_FILE" >&2; return 1; }
-    [ -d "$ARCHIVE_BASE" ] || { echo "Configure an existing archive directory first." >&2; return 1; }
+    [ -z "$ARCHIVE_BASE" ] || [ -d "$ARCHIVE_BASE" ] || { echo "Configure an existing archive directory first." >&2; return 1; }
     mkdir -p "$DATA_DIR/state"
     chmod 700 "$DATA_DIR" "$DATA_DIR/state"
     if [ -f "$TOKEN_FILE" ]; then chmod 600 "$TOKEN_FILE"; fi

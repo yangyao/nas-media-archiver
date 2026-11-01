@@ -12,6 +12,7 @@ import (
 func TestServiceSourceBrowseSeparatesArchiveAndSource(t *testing.T) {
 	s, _, source, target := serviceFixture(t)
 	s.config.Roots = []string{source, target}
+	s.settings.SourceRoots = s.config.Roots
 	if err := os.Symlink(target, filepath.Join(source, "archive-alias")); err != nil {
 		t.Fatal(err)
 	}

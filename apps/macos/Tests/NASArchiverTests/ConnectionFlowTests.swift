@@ -27,6 +27,30 @@ final class ConnectionFlowTests: XCTestCase {
         XCTAssertEqual(try TokenStore.token(for: connection.id), "valid-connection-test-token")
     }
 
+    func testUnconfiguredServerRequiresSettingsBeforeArchive() async throws {
+        let suite = "settings-flow-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ConnectionFlowProtocol.self]
+        let session = URLSession(configuration: config)
+        let model = AppModel(defaults: defaults, session: session)
+        let connection = NASConnection(name: "Test", address: "http://test-service:8787")
+        defer { try? model.removeConnection(connection); defaults.removePersistentDomain(forName: suite); session.invalidateAndCancel() }
+        model.connectionEditor = .init(connection: nil)
+        try await model.saveConnection(connection, token: "unconfigured-test-token")
+        XCTAssertTrue(model.isConnected)
+        XCTAssertFalse(model.canCreateArchive)
+        XCTAssertFalse(model.showNewArchive)
+        XCTAssertFalse(model.showArchiveSettings)
+        model.connectionEditor = nil
+        model.presentArchiveOnboardingIfNeeded()
+        XCTAssertTrue(model.showArchiveSettings)
+        model.showArchiveSettings = false
+        await model.refresh()
+        XCTAssertFalse(model.showArchiveSettings, "Cancellation must not reopen a modal on refresh")
+        XCTAssertFalse(model.canCreateArchive)
+    }
+
     func testWrongPasswordDoesNotCompleteConnection() async throws {
         try await assertConnectionFailure(token: "wrong-connection-test-token", expected: "连接密码不正确")
     }
@@ -145,6 +169,9 @@ private final class ConnectionFlowProtocol: URLProtocol, @unchecked Sendable {
         if credential == "Bearer wrong-connection-test-token" {
             status = 401
             payload = #"{"error":{"code":"unauthorized","message":"Invalid token"}}"#
+        } else if path.hasSuffix("/info"), credential.contains("unconfigured-") {
+            status = 200
+            payload = #"{"name":"Test service","version":"0.2.7","configured":false,"archiveBase":"","roots":["/share"],"freeBytes":1000,"tools":{}}"#
         } else if path.hasSuffix("/info") {
             status = 200
             payload = #"{"name":"Test service","version":"0.2.0","archiveBase":"/archive","roots":["/input","/archive"],"freeBytes":1000,"tools":{}}"#

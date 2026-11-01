@@ -21,7 +21,7 @@ struct NASArchiverApp: App {
             CommandGroup(after: .newItem) {
                 Button("新建归档…") { model.showNewArchive = true }
                     .keyboardShortcut("n", modifiers: .command)
-                    .disabled(!model.isConnected)
+                    .disabled(!model.canCreateArchive)
                 Button("刷新") { Task { await model.refresh() } }
                     .keyboardShortcut("r", modifiers: .command)
             }
