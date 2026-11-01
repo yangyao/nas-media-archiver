@@ -218,6 +218,7 @@ struct FileRow: View {
     var onBrowse: (String) -> Void
     var onChanged: () -> Void
     @State private var editDate = false
+    @State private var isExpanded = false
     @State private var reviewError: String?
     private var canReview: Bool { job.canStart || job.isTerminal }
     private var canEditDate: Bool { job.canStart && ["planned", "failed"].contains(file.status) && file.sha256.isEmpty }
@@ -248,7 +249,7 @@ struct FileRow: View {
     }
 
     var body: some View {
-        DisclosureGroup {
+        DisclosureGroup(isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: 12) {
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
                     pathRow("来源", path: file.sourcePath)
@@ -298,11 +299,12 @@ struct FileRow: View {
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Image(systemName: file.status == "completed" ? "checkmark.circle" : (file.reviewTitle == nil ? "doc" : "exclamationmark.circle"))
+                    .font(.system(size: 15))
                     .foregroundStyle(file.status == "failed" ? Color.red : Color.secondary)
                     .frame(width: 20)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(file.name).lineLimit(1)
-                    if let title = file.reviewTitle { Text(title).font(.caption).foregroundStyle(.secondary) }
+                Text(file.name).lineLimit(1).truncationMode(.middle).layoutPriority(1)
+                if !isExpanded, let title = file.reviewTitle {
+                    Text(title).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 Text(formattedBytes(file.size)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
@@ -316,8 +318,7 @@ struct FileRow: View {
     }
 }
 
-// Keep the disclosure indicator on the filename baseline even when a row has
-// a second line of review information.
+// Keep disclosure indicators, file icons and filenames on the same baseline.
 private struct FileDisclosureStyle: DisclosureGroupStyle {
     func makeBody(configuration: Configuration) -> some View {
         VStack(alignment: .leading, spacing: 0) {
