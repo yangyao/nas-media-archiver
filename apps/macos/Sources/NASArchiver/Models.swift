@@ -18,6 +18,7 @@ struct ServerInfo: Codable, Sendable {
 struct RemoteDirectory: Codable, Identifiable, Hashable, Sendable {
     var name: String
     var path: String
+    var selectable: Bool?
     var id: String { path }
 }
 
@@ -25,6 +26,7 @@ struct DirectoryListing: Codable, Sendable {
     var path: String
     var parentPath: String?
     var entries: [RemoteDirectory]
+    var selectable: Bool?
 }
 
 struct ArchiveJob: Codable, Identifiable, Equatable, Sendable {
@@ -84,16 +86,16 @@ struct ArchiveJob: Codable, Identifiable, Equatable, Sendable {
     }
     var statusLabel: String {
         switch status {
-        case "scanning": "正在掃描"
-        case "ready": supportedFiles == 0 ? "等待檔案" : "等待開始"
-        case "queued": "排隊中"
-        case "running": "正在歸檔"
-        case "pausing": "正在暫停"
-        case "paused": "已暫停"
-        case "completed": "歸檔完成"
+        case "scanning": "正在扫描"
+        case "ready": supportedFiles == 0 ? "等待文件" : "等待开始"
+        case "queued": "排队中"
+        case "running": "正在归档"
+        case "pausing": "正在暂停"
+        case "paused": "已暂停"
+        case "completed": "归档完成"
         case "completed_with_errors": "部分完成"
-        case "failed": "任務失敗"
-        case "interrupted": "等待恢復"
+        case "failed": "任务失败"
+        case "interrupted": "等待恢复"
         default: status
         }
     }
@@ -119,40 +121,40 @@ struct ArchiveFile: Codable, Identifiable, Sendable {
     var name: String { (sourcePath as NSString).lastPathComponent }
     var needsDateReview: Bool { metadataSource == "mtime" && !warning.isEmpty }
     var reviewTitle: String? {
-        if status == "failed" { return "歸檔失敗" }
-        if status == "unsupported" { return "不支援的格式" }
+        if status == "failed" { return "归档失败" }
+        if status == "unsupported" { return "不支持的格式" }
         if needsDateReview { return "使用修改日期" }
-        if warning.localizedCaseInsensitiveContains("suffix") { return "同名檔案另存" }
-        return warning.isEmpty ? nil : "請確認歸檔資訊"
+        if warning.localizedCaseInsensitiveContains("suffix") { return "同名文件另存" }
+        return warning.isEmpty ? nil : "请确认归档信息"
     }
     var reviewAdvice: String? {
-        if status == "failed" { return "來源已保留。確認錯誤原因後，重試此任務的失敗檔案。" }
-        if status == "unsupported" && name.lowercased().hasSuffix(".gif") { return "此為舊任務的掃描結果；新版已支援 GIF，仍在來源的檔案可建立新任務重新掃描。" }
-        if status == "unsupported" { return "此格式不會自動歸檔。可查看來源，另行保存或轉換格式。" }
-        if needsDateReview { return "未找到拍攝日期，使用了檔案修改日期。日期正確可直接確認；尚未歸檔時也能設定日期。" }
-        if warning.localizedCaseInsensitiveContains("suffix") { return "原有檔案不會覆蓋。不同內容以後綴另存；相同內容可啟用略過重複。" }
+        if status == "failed" { return "来源已保留。确认错误原因后，重试此任务的失败文件。" }
+        if status == "unsupported" && name.lowercased().hasSuffix(".gif") { return "此为旧任务的扫描结果；新版已支持 GIF，仍在来源的文件可建立新任务重新扫描。" }
+        if status == "unsupported" { return "此格式不会自动归档。可查看来源，另行保存或转换格式。" }
+        if needsDateReview { return "未找到拍摄日期，使用了文件修改日期。日期正确可直接确认；尚未归档时也能设置日期。" }
+        if warning.localizedCaseInsensitiveContains("suffix") { return "原有文件不会覆盖。不同内容以后缀另存；相同内容可启用跳过重复。" }
         return warning.isEmpty ? nil : warning
     }
     var metadataLabel: String {
         switch metadataSource {
-        case "filename": "檔名"
-        case "native-exif", "exiftool": "照片資訊"
-        case "ffprobe": "影片資訊"
+        case "filename": "档名"
+        case "native-exif", "exiftool": "照片信息"
+        case "ffprobe": "视频信息"
         case "mtime": "修改日期"
-        case "manual": "手動設定"
+        case "manual": "手动设置"
         default: metadataSource
         }
     }
     var statusLabel: String {
         switch status {
-        case "discovered": "待掃描"
-        case "planned": "待歸檔"
-        case "copying": "複製並校驗"
-        case "checking": "比對重複"
-        case "skipped": "重複，略過"
-        case "completed": "已歸檔"
-        case "failed": "失敗"
-        case "unsupported": "不支援"
+        case "discovered": "待扫描"
+        case "planned": "待归档"
+        case "copying": "复制并校验"
+        case "checking": "比对重复"
+        case "skipped": "重复，跳过"
+        case "completed": "已归档"
+        case "failed": "失败"
+        case "unsupported": "不支持"
         default: status
         }
     }
@@ -170,7 +172,7 @@ enum FileFilter: String, CaseIterable, Identifiable {
     case all, attention, failed, skipped
     var id: String { rawValue }
     var title: String {
-        switch self { case .all: "全部檔案"; case .attention: "需要關注"; case .failed: "失敗"; case .skipped: "略過重複" }
+        switch self { case .all: "全部文件"; case .attention: "需要关注"; case .failed: "失败"; case .skipped: "跳过重复" }
     }
 }
 
@@ -188,11 +190,11 @@ struct RemoteContentEntry: Decodable, Identifiable, Sendable {
     var symlink: Bool
     var id: String { path }
     var note: String {
-        if system { return "系統目錄，保留即可" }
-        if symlink { return "符號連結，不會自動處理" }
-        if path.contains("/.stfolder/") { return "Syncthing 同步標記，保留即可" }
-        if isDirectory { return "資料夾" }
-        return "保留在服務端；可複製路徑另行處理"
+        if system { return "系统目录，保留即可" }
+        if symlink { return "符号连结，不会自动处理" }
+        if path.contains("/.stfolder/") { return "Syncthing 同步标记，保留即可" }
+        if isDirectory { return "文件夹" }
+        return "保留在服务端；可复制路径另行处理"
     }
 }
 struct RemoteContents: Decodable, Sendable {
@@ -217,4 +219,23 @@ func taskOrdinal(_ job: ArchiveJob, among jobs: [ArchiveJob]) -> Int? {
     }
     guard let index = matches.firstIndex(where: { $0.id == job.id }) else { return nil }
     return index + 1
+}
+
+// Also filters responses from older services that ignore the source-purpose
+// query. Canonical QNAP paths and share aliases use the same display form.
+func sourceDirectoryListing(_ listing: DirectoryListing, archiveBase: String) -> DirectoryListing {
+    func contains(_ parent: String, _ child: String) -> Bool {
+        let a = (displayRemotePath(parent) as NSString).standardizingPath
+        let b = (displayRemotePath(child) as NSString).standardizingPath
+        return a == b || b.hasPrefix(a == "/" ? a : a + "/")
+    }
+    guard !archiveBase.isEmpty else { return listing }
+    var result = listing
+    result.entries = listing.entries.filter { !contains(archiveBase, $0.path) }.map {
+        var entry = $0
+        entry.selectable = ($0.selectable ?? true) && !contains($0.path, archiveBase)
+        return entry
+    }
+    result.selectable = !listing.path.isEmpty && (listing.selectable ?? true) && !contains(archiveBase, listing.path) && !contains(listing.path, archiveBase)
+    return result
 }

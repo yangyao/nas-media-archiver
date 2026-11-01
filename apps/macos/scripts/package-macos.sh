@@ -29,16 +29,16 @@ cat > "$APP_PATH/Contents/Info.plist" <<'PLIST'
     <key>CFBundleDisplayName</key><string>NAS Archiver</string>
     <key>CFBundleExecutable</key><string>NASArchiver</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.2.5</string>
-    <key>CFBundleVersion</key><string>6</string>
+    <key>CFBundleShortVersionString</key><string>0.2.6</string>
+    <key>CFBundleVersion</key><string>7</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>LSMinimumSystemVersion</key><string>26.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSHighResolutionCapable</key><true/>
-    <key>CFBundleDevelopmentRegion</key><string>zh-Hant</string>
-    <key>CFBundleLocalizations</key><array><string>zh-Hant</string></array>
-    <key>NSLocalNetworkUsageDescription</key><string>連線到區域網路上的歸檔服務端，瀏覽資料夾並管理歸檔任務。服務端可執行在 NAS 上。</string>
+    <key>CFBundleDevelopmentRegion</key><string>zh-Hans</string>
+    <key>CFBundleLocalizations</key><array><string>zh-Hans</string></array>
+    <key>NSLocalNetworkUsageDescription</key><string>连接局域网中的归档服务，浏览目录并管理归档任务。</string>
     <key>NSAppTransportSecurity</key><dict>
         <key>NSAllowsArbitraryLoads</key><true/>
         <key>NSAllowsLocalNetworking</key><true/>

@@ -10,12 +10,12 @@ struct ContentView: View {
         NavigationSplitView {
             List(selection: $model.selectedJobID) {
                 if !activeJobs.isEmpty {
-                    Section("正在處理") {
+                    Section("正在处理") {
                         ForEach(activeJobs) { job in JobRow(job: job).tag(job.id) }
                     }
                 }
                 if !historyJobs.isEmpty {
-                    Section("歷史記錄") {
+                    Section("历史记录") {
                         ForEach(historyJobs) { job in JobRow(job: job).tag(job.id) }
                     }
                 }
@@ -34,7 +34,7 @@ struct ContentView: View {
                 if let job = model.selectedJob {
                     JobDetailView(job: job).id(job.id)
                 } else if model.selectedConnection == nil {
-                    Button("連線服務", systemImage: "link") { editConnection() }
+                    Button("连接服务", systemImage: "link") { editConnection() }
                         .buttonStyle(.glassProminent)
                         .controlSize(.large)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -45,9 +45,9 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                Button("新增歸檔", systemImage: "plus") { model.showNewArchive = true }
+                Button("新建归档", systemImage: "plus") { model.showNewArchive = true }
                     .labelStyle(.iconOnly)
-                    .help("新增歸檔（⌘N）")
+                    .help("新建归档（⌘N）")
                     .disabled(!model.isConnected)
             }
         }
@@ -83,7 +83,7 @@ struct ContentView: View {
                         Circle().fill(model.isConnected ? Color.green : Color.secondary.opacity(0.5))
                             .frame(width: 6, height: 6)
                     }
-                    Text(model.selectedConnection == nil ? "設定連線…" : model.connectionLabel)
+                    Text(model.selectedConnection == nil ? "设置连接…" : model.connectionLabel)
                         .font(.callout).foregroundStyle(.secondary)
                     Spacer()
                     Image(systemName: "gearshape").foregroundStyle(.secondary)
@@ -92,8 +92,8 @@ struct ContentView: View {
                 .padding(.horizontal, 16).padding(.vertical, 13)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("服務連線設定，\(model.connectionLabel)")
-            .help("設定歸檔服務的地址與連線密碼")
+            .accessibilityLabel("服务连接设置，\(model.connectionLabel)")
+            .help("设置归档服务的地址与连接密码")
         }
         .background(.bar)
     }
@@ -117,15 +117,15 @@ struct JobRow: View {
                 HStack(spacing: 6) {
                     Text(job.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
                     if let ordinal = taskOrdinal(job, among: model.jobs) {
-                        TaskRunBadge(ordinal: ordinal).help("建立於 \(job.creationDescription)")
+                        TaskRunBadge(ordinal: ordinal).help("建立于 \(job.creationDescription)")
                     }
                 }
                 HStack(spacing: 5) {
                     if taskOrdinal(job, among: model.jobs) != nil {
-                        Text("\(job.totalFiles.formatted()) 個 ·")
+                        Text("\(job.totalFiles.formatted()) 个 ·")
                     }
                     Text(job.statusLabel)
-                }.help("建立於 \(job.creationDescription)")
+                }.help("建立于 \(job.creationDescription)")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
                 if ["running", "pausing"].contains(job.status) {
                     ProgressView(value: job.progress).controlSize(.mini)
@@ -133,14 +133,14 @@ struct JobRow: View {
             }
             Spacer(minLength: 0)
             if job.canStart {
-                Button(job.status == "ready" ? "開始歸檔" : "繼續歸檔", systemImage: "play.fill") {
+                Button(job.status == "ready" ? "开始归档" : "继续归档", systemImage: "play.fill") {
                     Task { await model.perform("start", job: job) }
                 }
                 .labelStyle(.iconOnly).buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
                 .disabled(!model.isConnected || model.isPerformingAction)
             } else if job.canPause {
-                Button("暫停歸檔", systemImage: "pause.fill") {
+                Button("暂停归档", systemImage: "pause.fill") {
                     Task { await model.perform("pause", job: job) }
                 }
                 .labelStyle(.iconOnly).buttonStyle(.borderless)
@@ -165,13 +165,13 @@ struct StatusBanner: View {
                 let parts = message.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
                 Text(String(parts.first ?? "")).font(.callout).textSelection(.enabled)
                 if parts.count > 1 {
-                    DisclosureGroup("詳細資訊") {
+                    DisclosureGroup("详细信息") {
                         Text(String(parts[1])).font(.caption).textSelection(.enabled).foregroundStyle(.secondary)
                     }.font(.caption)
                 }
             }
             Spacer(minLength: 0)
-            if let dismiss { Button("關閉", systemImage: "xmark", action: dismiss).labelStyle(.iconOnly).buttonStyle(.plain) }
+            if let dismiss { Button("关闭", systemImage: "xmark", action: dismiss).labelStyle(.iconOnly).buttonStyle(.plain) }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -188,6 +188,6 @@ struct TaskRunBadge: View {
             .padding(.horizontal, 5).padding(.vertical, 2)
             .background(.quaternary.opacity(0.5), in: Capsule())
             .fixedSize()
-            .accessibilityLabel("第 \(ordinal) 次任務")
+            .accessibilityLabel("第 \(ordinal) 次任务")
     }
 }

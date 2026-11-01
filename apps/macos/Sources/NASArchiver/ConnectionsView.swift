@@ -5,7 +5,7 @@ struct ConnectionEditorView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     var connection: NASConnection?
-    @State private var name = "我的歸檔服務"
+    @State private var name = "我的归档服务"
     @State private var address = "http://"
     @State private var token = ""
     @State private var error: String?
@@ -18,28 +18,27 @@ struct ConnectionEditorView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Image(systemName: "server.rack").font(.title2).foregroundStyle(.tint)
-                Text("連線設定").font(.title2.weight(.semibold))
+                Text("连接设置").font(.title2.weight(.semibold))
                 Spacer()
             }.padding(24)
             Form {
-                Section("連線") {
-                    TextField("服務地址", text: $address, prompt: Text("http://192.168.2.196:8787"))
+                Section("连接") {
+                    TextField("服务地址", text: $address, prompt: Text("http://192.168.2.196:8787"))
                         .autocorrectionDisabled()
-                    SecureField("連線密碼", text: $token, prompt: Text("服務端提供的 Token"))
-                    Text("使用服務端提供的 Token，密碼會儲存在本機，不使用鑰匙串。")
-                        .font(.caption).foregroundStyle(.secondary)
+                    SecureField("连接密码", text: $token, prompt: Text("服务端提供的 Token"))
+                        .help("填写归档服务的 Token，密码保存在本机。")
                     HStack {
-                        Button(testing ? "正在測試…" : "測試連線") { Task { await testConnection() } }.disabled(testing || saving)
+                        Button(testing ? "正在测试…" : "测试连接") { Task { await testConnection() } }.disabled(testing || saving)
                         if let testResult { Text(testResult).font(.caption).foregroundStyle(.green) }
                     }
                 }
                 if connection?.id == model.selectedConnectionID, let info = model.serverInfo {
-                    Section("服務資訊") {
-                        LabeledContent("歸檔根目錄", value: info.archiveBase).textSelection(.enabled)
-                        LabeledContent("分類規則", value: "照片 / PNG / 影片 · 年 / 月")
-                        LabeledContent("服務版本", value: info.version)
-                        LabeledContent("可用空間", value: formattedBytes(info.freeBytes))
-                        Text("歸檔規則由服務端管理；新建任務時可選擇歸檔位置。")
+                    Section("服务信息") {
+                        LabeledContent("归档根目录", value: displayRemotePath(info.archiveBase)).textSelection(.enabled)
+                        LabeledContent("分类规则", value: "照片 / PNG / 视频 · 年 / 月")
+                        LabeledContent("服务版本", value: info.version)
+                        LabeledContent("可用空间", value: formattedBytes(info.freeBytes))
+                        Text("归档规则由服务端管理；新建任务时可选择归档位置。")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -48,14 +47,14 @@ struct ConnectionEditorView: View {
             Divider()
             HStack {
                 if connection != nil && model.isConnected {
-                    Button("移除連線…", role: .destructive) { confirmRemoval = true }
+                    Button("移除连接…", role: .destructive) { confirmRemoval = true }
                         .disabled(saving)
                 }
                 Spacer()
                 if model.isConnected {
                     Button("取消") { dismiss() }.buttonStyle(.glass).keyboardShortcut(.cancelAction).disabled(saving)
                 }
-                Button(saving ? "正在連線…" : "連線") { Task { await save() } }
+                Button(saving ? "正在连接…" : "连接") { Task { await save() } }
                     .buttonStyle(.glassProminent).keyboardShortcut(.defaultAction)
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || token.isEmpty || testing || saving)
             }.padding(20)
@@ -68,12 +67,12 @@ struct ConnectionEditorView: View {
                 do { token = try TokenStore.token(for: connection.id) } catch { self.error = presentableError(error) }
             }
         }
-        .confirmationDialog("移除這個服務端連線？", isPresented: $confirmRemoval) {
-            Button("移除連線", role: .destructive) {
+        .confirmationDialog("移除这个服务端连接？", isPresented: $confirmRemoval) {
+            Button("移除连接", role: .destructive) {
                 guard let connection else { return }
                 do { try model.removeConnection(connection); dismiss() } catch { self.error = presentableError(error) }
             }
-        } message: { Text("只移除 Mac 上保存的連線和密碼，服務端上的任務繼續運行。") }
+        } message: { Text("只移除 Mac 上保存的连接和密码，服务端上的任务继续运行。") }
     }
 
     private func save() async {
@@ -92,7 +91,7 @@ struct ConnectionEditorView: View {
         do {
             let api = try APIClient(address: address, token: token)
             let info = try await api.info()
-            testResult = "已連線到 \(info.name) · \(info.version)"
+            testResult = "已连接到 \(info.name) · \(info.version)"
         } catch { self.error = presentableError(error) }
     }
 }
@@ -105,37 +104,37 @@ struct ClientSettingsView: View {
     var body: some View {
         TabView {
             Form {
-                Picker("外觀", selection: $appearance) {
-                    Text("跟隨系統").tag("system")
-                    Text("淺色").tag("light")
+                Picker("外观", selection: $appearance) {
+                    Text("跟随系统").tag("system")
+                    Text("浅色").tag("light")
                     Text("深色").tag("dark")
                 }
-                Toggle("歸檔完成時發送通知", isOn: $completionNotifications)
+                Toggle("归档完成时发送通知", isOn: $completionNotifications)
                     .onChange(of: completionNotifications) { _, enabled in
                         guard enabled else { return }
                         Task {
                             do {
                                 let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
-                                if !granted { completionNotifications = false; notificationError = "請在系統設定中允許 NAS Archiver 發送通知。" }
+                                if !granted { completionNotifications = false; notificationError = "请在系统设置中允许 NAS Archiver 发送通知。" }
                             } catch { completionNotifications = false; notificationError = presentableError(error) }
                         }
                     }
                 if let notificationError { Text(notificationError).font(.caption).foregroundStyle(.orange) }
-                Text("退出 Mac 應用後，服務端上的歸檔任務仍會繼續。")
+                Text("退出 Mac 应用后，服务端上的归档任务仍会继续。")
                     .font(.caption).foregroundStyle(.secondary)
             }.formStyle(.grouped).tabItem { Label("通用", systemImage: "gearshape") }
             VStack(alignment: .leading, spacing: 16) {
-                Text("服務端連線").font(.headline)
-                Text("點擊主視窗左下角的設定，即可修改歸檔服務的連線地址與密碼。")
+                Text("服务端连接").font(.headline)
+                Text("点击主窗口左下角的设置，即可修改归档服务的连接地址与密码。")
                     .foregroundStyle(.secondary)
                 if let connection = model.selectedConnection {
-                    LabeledContent("服務地址", value: connection.address).font(.callout)
-                    LabeledContent("狀態", value: model.connectionLabel).font(.callout)
+                    LabeledContent("服务地址", value: connection.address).font(.callout)
+                    LabeledContent("状态", value: model.connectionLabel).font(.callout)
                 } else {
-                    Text("尚未設定連線").font(.callout).foregroundStyle(.secondary)
+                    Text("尚未设置连接").font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
-            }.padding(24).tabItem { Label("連線", systemImage: "network") }
+            }.padding(24).tabItem { Label("连接", systemImage: "network") }
         }
         .frame(width: 560, height: 300)
         .padding(12)

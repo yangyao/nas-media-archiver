@@ -95,6 +95,12 @@ def main():
                 rejected('GET', '/api/v1/browse?path=' + urllib.parse.quote(str(sources / 'escape')))
                 listing = request('GET', '/api/v1/browse?path=' + urllib.parse.quote(str(sources)))
                 assert any(entry['path'] == str(batch) for entry in listing['entries']), listing
+                source_roots = request('GET', '/api/v1/browse?purpose=source')
+                assert [entry['path'] for entry in source_roots['entries']] == [str(sources)], source_roots
+                source_listing = request('GET', '/api/v1/browse?' + urllib.parse.urlencode({'path': str(sources), 'purpose': 'source'}))
+                assert source_listing['selectable']
+                assert any(entry['path'] == str(batch) for entry in source_listing['entries'])
+                rejected('GET', '/api/v1/browse?' + urllib.parse.urlencode({'path': str(archive), 'purpose': 'source'}))
                 rejected('POST', '/api/v1/jobs', {'sourcePaths': [str(archive)], 'archiveBase': str(archive)})
                 job = request('POST', '/api/v1/jobs', {'sourcePaths': [str(batch)], 'archiveBase': str(archive), 'cleanupEmptyDirectories': True})
                 job_path = '/api/v1/jobs/' + job['id']

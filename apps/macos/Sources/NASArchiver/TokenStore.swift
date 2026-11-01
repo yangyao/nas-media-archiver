@@ -18,7 +18,7 @@ struct LocalTokenStore {
             return ""
         }
         guard let value = String(data: data, encoding: .utf8) else {
-            throw ServiceError(message: "無法讀取本機的連線密碼，請在連線設定重新填寫。")
+            throw ServiceError(message: "无法读取本机的连接密码，请在连接设置重新填写。")
         }
         return value.trimmingCharacters(in: .whitespacesAndNewlines)
     }

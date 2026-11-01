@@ -18,22 +18,22 @@ struct FolderContentsView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("服務端內容").font(.title3.weight(.semibold))
+                Text("服务端内容").font(.title3.weight(.semibold))
                 Spacer()
                 Button("完成") { dismiss() }.buttonStyle(.glass).keyboardShortcut(.cancelAction)
             }.padding(20)
             HStack(spacing: 12) {
-                Button("上一層", systemImage: "arrow.up") {
+                Button("上一层", systemImage: "arrow.up") {
                     if let parent = contents?.parentPath { currentPath = parent }
                 }.labelStyle(.iconOnly).buttonStyle(.glass)
                     .disabled(contents?.parentPath == nil || loading)
                 Text(currentPath).font(.caption).lineLimit(2).textSelection(.enabled)
                 Spacer(minLength: 0)
-                Button("複製路徑", systemImage: "document.on.document") { copyRemotePath(currentPath) }
+                Button("复制路径", systemImage: "document.on.document") { copyRemotePath(currentPath) }
                     .labelStyle(.iconOnly).buttonStyle(.glass)
             }.padding(.horizontal, 20).padding(.bottom, 14)
             if roots.count > 1 {
-                Picker("來源", selection: Binding(get: { roots.first { currentPath == $0 || currentPath.hasPrefix($0 + "/") } ?? roots[0] }, set: { currentPath = $0 })) {
+                Picker("来源", selection: Binding(get: { roots.first { currentPath == $0 || currentPath.hasPrefix($0 + "/") } ?? roots[0] }, set: { currentPath = $0 })) {
                     ForEach(roots, id: \.self) { Text($0).tag($0) }
                 }.padding(.horizontal, 20).padding(.bottom, 10)
             }
@@ -43,10 +43,10 @@ struct FolderContentsView: View {
             } else if let error {
                 VStack(spacing: 14) {
                     Text(error).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
-                    Button("重試") { Task { await load() } }.buttonStyle(.glass)
+                    Button("重试") { Task { await load() } }.buttonStyle(.glass)
                 }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if contents?.entries.isEmpty == true {
-                Text("目錄是空的").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
+                Text("目录是空的").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(contents?.entries ?? []) { entry in
                     HStack(spacing: 12) {
@@ -58,10 +58,10 @@ struct FolderContentsView: View {
                         Spacer()
                         if !entry.isDirectory { Text(formattedBytes(entry.size)).font(.caption).foregroundStyle(.secondary) }
                         if entry.canOpen {
-                            Button("開啟", systemImage: "chevron.right") { currentPath = entry.path }
+                            Button("开启", systemImage: "chevron.right") { currentPath = entry.path }
                                 .labelStyle(.iconOnly).buttonStyle(.plain)
                         }
-                        Button("複製路徑", systemImage: "document.on.document") { copyRemotePath(entry.path) }
+                        Button("复制路径", systemImage: "document.on.document") { copyRemotePath(entry.path) }
                             .labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.secondary)
                     }.padding(.vertical, 6)
                 }.listStyle(.inset)

@@ -139,3 +139,24 @@ Empty or unsupported-only jobs cannot start, even through the API. Their primary
 Mac action is “重新掃描”; nonempty unstarted previews offer both rescan and start.
 Already-started/completed tasks retain their journals and require a new task for
 later batches, preserving history and recovery data.
+
+### Source picker and Simplified Chinese client (0.2.6)
+
+`GET /api/v1/browse?purpose=source` presents the source-picker view of `ROOTS`.
+It excludes the configured archive destination, service state directory and their
+descendants, including aliases resolved through symlinks. An optional
+`archiveBase` query additionally excludes a per-job destination after validating
+it against the same access roots. Ancestors of excluded directories remain
+navigable but have `selectable:false`; the virtual root is also not selectable.
+Entry and listing `selectable` fields are additive. Default browsing and
+read-only residual inspection keep their existing behavior and access bounds.
+
+The Mac source picker auto-opens a single available source root, without selecting
+it automatically. Multiple source roots are listed for explicit choice. A local
+filter provides compatibility with older services that ignore `purpose=source`.
+There is no new source-directory step during connection and no automatic widening
+of access to every QNAP share. `ROOTS` is an administrator-configured access list,
+not just a source preference; it must still include the archive write location.
+
+App strings, menus and bundle localization now use Simplified Chinese. User-owned
+folder names, job names and diagnostic paths are not converted.

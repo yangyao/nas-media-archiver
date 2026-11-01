@@ -287,26 +287,71 @@ func (s *archiveService) info(w http.ResponseWriter) {
 	free := int64(stat.Bavail) * int64(stat.Bsize)
 	writeServiceJSON(w, 200, map[string]interface{}{"name": s.config.Name, "version": serviceVersion, "archiveBase": s.config.ArchiveBase, "roots": s.config.Roots, "freeBytes": free, "tools": tools, "persistence": s.store.status()})
 }
+
+// Source browsing is a view of the configured access roots, not a broader
+// filesystem permission. Generic browsing/inspection retain their own purposes.
 func (s *archiveService) browse(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("includeFiles") == "true" {
 		s.inspectDirectory(w, r)
 		return
 	}
+	sourceOnly := r.URL.Query().Get("purpose") == "source"
+	excluded := []string{s.config.ArchiveBase, s.config.StateDir}
+	if sourceOnly && r.URL.Query().Get("archiveBase") != "" {
+		target, err := s.allowedPath(r.URL.Query().Get("archiveBase"), false)
+		if err != nil {
+			serviceError(w, 400, "invalid_request", "Archive destination is outside configured roots.")
+			return
+		}
+		excluded = append(excluded, target)
+	}
+	hidden := func(path string) bool {
+		if !sourceOnly {
+			return false
+		}
+		for _, target := range excluded {
+			if pathWithin(path, target) {
+				return true
+			}
+		}
+		return false
+	}
+	selectable := func(path string) bool {
+		if path == "" {
+			return false
+		}
+		if !sourceOnly {
+			return true
+		}
+		for _, target := range excluded {
+			if pathsOverlap(path, target) {
+				return false
+			}
+		}
+		return true
+	}
 	type entry struct {
-		Name string `json:"name"`
-		Path string `json:"path"`
+		Name       string `json:"name"`
+		Path       string `json:"path"`
+		Selectable bool   `json:"selectable"`
 	}
 	entries := []entry{}
 	path := r.URL.Query().Get("path")
 	var parent *string
 	if path == "" {
-		for _, p := range s.config.Roots {
-			entries = append(entries, entry{filepath.Base(p), p})
+		for _, root := range s.config.Roots {
+			if !hidden(root) {
+				entries = append(entries, entry{filepath.Base(root), root, selectable(root)})
+			}
 		}
 	} else {
 		resolved, err := s.allowedPath(path, true)
 		if err != nil {
 			serviceError(w, 403, "forbidden", err.Error())
+			return
+		}
+		if hidden(resolved) {
+			serviceError(w, 403, "invalid_source", "Archive and service state directories cannot be selected as sources.")
 			return
 		}
 		path = resolved
@@ -319,25 +364,25 @@ func (s *archiveService) browse(w http.ResponseWriter, r *http.Request) {
 			if serviceExcluded(d.Name()) {
 				continue
 			}
-			p := filepath.Join(path, d.Name())
 			if !d.IsDir() && d.Type()&os.ModeSymlink == 0 {
 				continue
 			}
-			v, e := s.allowedPath(p, true)
-			if e == nil {
-				entries = append(entries, entry{d.Name(), v})
+			v, e := s.allowedPath(filepath.Join(path, d.Name()), true)
+			if e == nil && !hidden(v) {
+				entries = append(entries, entry{d.Name(), v, selectable(v)})
 			}
 		}
 		candidate := filepath.Dir(path)
 		if candidate != path {
-			if p, e := s.allowedPath(candidate, true); e == nil {
+			if p, e := s.allowedPath(candidate, true); e == nil && !hidden(p) {
 				parent = &p
 			}
 		}
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
-	writeServiceJSON(w, 200, map[string]interface{}{"path": path, "parentPath": parent, "entries": entries})
+	writeServiceJSON(w, 200, map[string]interface{}{"path": path, "parentPath": parent, "entries": entries, "selectable": selectable(path)})
 }
+
 func (s *archiveService) files(w http.ResponseWriter, r *http.Request, id string) {
 	filter := r.URL.Query().Get("filter")
 	if filter == "" {

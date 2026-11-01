@@ -10,6 +10,7 @@ struct NASArchiverApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(model)
+                .environment(\.locale, Locale(identifier: "zh_Hans_CN"))
                 .preferredColorScheme(appearance == "light" ? .light : (appearance == "dark" ? .dark : nil))
                 .frame(minWidth: 860, minHeight: 620)
         }
@@ -18,14 +19,14 @@ struct NASArchiverApp: App {
         .defaultSize(width: 1080, height: 760)
         .commands {
             CommandGroup(after: .newItem) {
-                Button("新增歸檔…") { model.showNewArchive = true }
+                Button("新建归档…") { model.showNewArchive = true }
                     .keyboardShortcut("n", modifiers: .command)
                     .disabled(!model.isConnected)
                 Button("刷新") { Task { await model.refresh() } }
                     .keyboardShortcut("r", modifiers: .command)
             }
         }
-        Settings { ClientSettingsView().environmentObject(model) }
+        Settings { ClientSettingsView().environmentObject(model).environment(\.locale, Locale(identifier: "zh_Hans_CN")) }
     }
 }
 

@@ -17,30 +17,32 @@ struct NewArchiveView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 13) {
+            HStack(spacing: 12) {
                 Image(systemName: "folder.badge.plus").font(.title2).foregroundStyle(.tint)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("新增歸檔").font(.title2.weight(.semibold))
-                    Text("選擇資料夾，先掃描預覽。")
-                        .foregroundStyle(.secondary)
-                }
+                Text("新建归档").font(.title2.weight(.semibold))
                 Spacer()
-            }.padding(24)
+            }.padding(22)
             Divider()
             HStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        Button("根目錄", systemImage: "house") { load("") }.labelStyle(.iconOnly)
-                        Button("上一級", systemImage: "arrow.up") { load(listing?.parentPath ?? "") }
-                            .labelStyle(.iconOnly).disabled(listing?.path.isEmpty != false || loading)
-                        TextField("服務端路徑", text: $path).textFieldStyle(.roundedBorder).onSubmit { load(path) }
-                        Button("前往", systemImage: "arrow.right") { load(path) }.labelStyle(.iconOnly)
+                VStack(spacing: 0) {
+                    HStack(spacing: 10) {
+                        Button("来源目录", systemImage: "house") { load("") }
+                            .labelStyle(.iconOnly).buttonStyle(.glass)
+                            .help("查看服务端允许的来源目录")
+                        Button("上一级", systemImage: "arrow.up") { load(listing?.parentPath ?? "") }
+                            .labelStyle(.iconOnly).buttonStyle(.glass)
+                            .disabled(listing?.path.isEmpty != false || loading)
+                        TextField("目录路径", text: $path).textFieldStyle(.roundedBorder).onSubmit { load(path) }
+                        Button("前往", systemImage: "arrow.right") { load(path) }
+                            .labelStyle(.iconOnly).buttonStyle(.glass)
                     }.padding(14)
                     Divider()
                     if loading {
-                        Spacer(); HStack { Spacer(); ProgressView("讀取目錄…"); Spacer() }; Spacer()
+                        ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else if let listing, listing.entries.isEmpty {
-                        ContentUnavailableView("沒有子資料夾", systemImage: "folder", description: Text("可以選擇當前資料夾，或返回上一級。"))
+                        Text(listing.path.isEmpty ? "没有可用的来源目录" : "没有子文件夹")
+                            .font(.callout).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         List(listing?.entries ?? []) { directory in
                             HStack(spacing: 10) {
@@ -49,78 +51,75 @@ struct NewArchiveView: View {
                                     set: { value in
                                         if value != selectedPaths.contains(directory.path) { toggle(directory.path) }
                                     }
-                                )) {
-                                    Label(directory.name, systemImage: "folder.fill").lineLimit(1)
-                                }
-                                .toggleStyle(.checkbox)
-                                .accessibilityLabel("選擇 \(directory.name)")
+                                )) { Label(directory.name, systemImage: "folder").lineLimit(1) }
+                                    .toggleStyle(.checkbox)
+                                    .disabled(directory.selectable == false)
+                                    .accessibilityLabel("选择 \(directory.name)")
+                                    .help(directory.selectable == false ? "请打开子目录选择来源。" : directory.path)
                                 Spacer()
-                                Button("開啟 \(directory.name)", systemImage: "chevron.right") { load(directory.path) }
-                                    .labelStyle(.iconOnly)
-                                    .help("開啟 \(directory.name)")
-                            }
-                            .padding(.vertical, 5)
-                            .accessibilityElement(children: .contain)
+                                Button("打开 \(directory.name)", systemImage: "chevron.right") { load(directory.path) }
+                                    .labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.secondary)
+                            }.padding(.vertical, 6).accessibilityElement(children: .contain)
                         }.listStyle(.inset)
                     }
-                    Divider()
-                    HStack {
-                        Text(listing?.path.isEmpty == false ? listing!.path : "允許存取的 服務端目錄")
-                            .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                        Spacer()
-                        if let listing, !listing.path.isEmpty {
-                            Button(selectedPaths.contains(listing.path) ? "取消選擇當前目錄" : "選擇當前目錄") { toggle(listing.path) }
-                        }
-                    }.padding(12)
+                    if let listing, !listing.path.isEmpty {
+                        Divider()
+                        HStack {
+                            Spacer()
+                            Button(selectedPaths.contains(listing.path) ? "取消选择" : "选择此文件夹") { toggle(listing.path) }
+                                .buttonStyle(.glass).controlSize(.small)
+                                .disabled(listing.selectable == false || loading)
+                        }.padding(12)
+                    }
                 }
                 Divider()
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("已選擇 \(selectedPaths.count) 個資料夾").font(.headline)
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Text("已选来源").font(.headline)
+                        if !selectedPaths.isEmpty { Text("\(selectedPaths.count)").font(.caption).foregroundStyle(.secondary) }
+                    }
                     if selectedPaths.isEmpty {
-                        Text("可選擇多個批次。嵌套的資料夾會合併爲最上層目錄。")
-                            .font(.callout).foregroundStyle(.secondary)
+                        Text("在左侧选择文件夹").font(.callout).foregroundStyle(.secondary)
                     }
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
                             ForEach(selectedPaths.sorted(), id: \.self) { selected in
-                                HStack(alignment: .top) {
-                                    Image(systemName: "folder")
-                                    Text(selected).font(.caption).textSelection(.enabled)
+                                HStack(alignment: .top, spacing: 8) {
+                                    Image(systemName: "folder").foregroundStyle(.secondary)
+                                    Text(displayRemotePath(selected)).font(.caption).lineLimit(3).help(selected)
                                     Spacer(minLength: 0)
                                     Button("移除", systemImage: "xmark.circle.fill") { selectedPaths.remove(selected) }
                                         .labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.secondary)
                                 }
                             }
-                        }
+                        }.frame(maxWidth: .infinity, alignment: .leading)
                     }
                     Divider()
-                    Text("歸檔位置").font(.headline)
-                    TextField("歸檔根目錄", text: $archiveBase).textFieldStyle(.roundedBorder)
-                    VStack(alignment: .leading, spacing: 5) {
-                        Label("照片 → photos / 年 / 月", systemImage: "photo")
-                        Label("PNG → pngs / 年 / 月", systemImage: "photo.on.rectangle")
-                        Label("影片 → videos / 年 / 月", systemImage: "film")
-                    }.font(.caption).foregroundStyle(.secondary)
-                    Toggle("略過重複檔案", isOn: $skipDuplicates).font(.callout)
-                    Text("內容相同時保留來源，不再複製。").font(.caption).foregroundStyle(.secondary)
-                    Toggle("完成後清理空目錄", isOn: $cleanup).font(.callout)
-                    Text("只移除空目錄；不支援或失敗的檔案會保留。")
-                        .font(.caption).foregroundStyle(.secondary)
-                }.padding(20).frame(width: 280)
+                    Text("归档到").font(.caption).foregroundStyle(.secondary)
+                    TextField("归档位置", text: $archiveBase).textFieldStyle(.roundedBorder)
+                        .onSubmit { load(listing?.path ?? "") }
+                    Toggle("跳过重复（保留来源）", isOn: $skipDuplicates)
+                        .help("逐字节确认内容相同后跳过，不再复制，来源保留。")
+                    Toggle("清理空文件夹", isOn: $cleanup)
+                        .help("完成后只移除空文件夹，其他内容保留。")
+                }.font(.callout).padding(20).frame(width: 280)
             }
             if let error { StatusBanner(message: error, systemImage: "exclamationmark.triangle", isError: true) }
             Divider()
             HStack {
-                Label("掃描不會移動檔案", systemImage: "checkmark.shield").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(submitting ? "正在建立…" : "掃描預覽") { Task { await create() } }
+                Button("取消") { dismiss() }.buttonStyle(.glass).keyboardShortcut(.cancelAction)
+                Button(submitting ? "正在创建…" : "扫描预览") { Task { await create() } }
                     .keyboardShortcut(.defaultAction).buttonStyle(.glassProminent)
+                    .help("只扫描并生成预览，不会移动文件。")
                     .disabled(selectedPaths.isEmpty || archiveBase.isEmpty || submitting || !model.isConnected)
-            }.padding(20)
+            }.padding(18)
         }
-        .frame(width: 920, height: 650)
-        .onAppear { archiveBase = model.serverInfo?.archiveBase ?? ""; load("") }
+        .frame(width: 900, height: 560)
+        .onAppear {
+            archiveBase = displayRemotePath(model.serverInfo?.archiveBase ?? "")
+            load("", enterOnlyRoot: true)
+        }
         .onDisappear { loadTask?.cancel() }
         .onChange(of: connectionID) { _, _ in dismiss() }
     }
@@ -131,14 +130,23 @@ struct NewArchiveView: View {
         guard !selectedPaths.contains(where: { value.hasPrefix($0 + "/") }) else { return }
         selectedPaths.insert(value)
     }
-    private func load(_ value: String) {
+    private func load(_ value: String, enterOnlyRoot: Bool = false) {
         loadTask?.cancel(); loading = true; error = nil
+        let destination = archiveBase
         loadTask = Task {
             do {
-                let result = try await model.api().browse(value)
+                let api = try model.api()
+                var result = try await api.browseSources(value, archiveBase: destination)
                 try Task.checkCancellation()
-                listing = result; path = result.path; loading = false
-            } catch is CancellationError {} catch { guard !Task.isCancelled else { return }; self.error = presentableError(error); loading = false }
+                if enterOnlyRoot && result.path.isEmpty && result.entries.count == 1 {
+                    result = try await api.browseSources(result.entries[0].path, archiveBase: destination)
+                    try Task.checkCancellation()
+                }
+                listing = result; path = displayRemotePath(result.path); loading = false
+            } catch is CancellationError {} catch {
+                guard !Task.isCancelled else { return }
+                self.error = presentableError(error); loading = false
+            }
         }
     }
     private func create() async {

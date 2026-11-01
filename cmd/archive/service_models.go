@@ -2,7 +2,7 @@ package main
 
 import "time"
 
-const serviceVersion = "0.2.5"
+const serviceVersion = "0.2.6"
 
 type ServiceJob struct {
 	Started                 bool           `json:"started"`

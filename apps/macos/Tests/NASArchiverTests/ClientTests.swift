@@ -54,14 +54,31 @@ final class ClientTests: XCTestCase {
         var file = try JSONDecoder().decode(ArchiveFile.self, from: Data(payload.utf8))
         XCTAssertTrue(file.needsDateReview)
         XCTAssertEqual(file.reviewTitle, "使用修改日期")
-        XCTAssertTrue(file.reviewAdvice?.contains("設定日期") == true)
+        XCTAssertTrue(file.reviewAdvice?.contains("设置日期") == true)
         file.warning = ""
         XCTAssertNil(file.reviewTitle)
         file.status = "unsupported"
         XCTAssertTrue(file.reviewAdvice?.contains("另行保存") == true)
         let listing = #"{"path":"/upload","parentPath":null,"entries":[{"name":".stfolder","path":"/upload/.stfolder","isDirectory":true,"size":0,"system":true,"canOpen":true,"symlink":false}]}"#
         let contents = try JSONDecoder().decode(RemoteContents.self, from: Data(listing.utf8))
-        XCTAssertEqual(contents.entries[0].note, "系統目錄，保留即可")
+        XCTAssertEqual(contents.entries[0].note, "系统目录，保留即可")
+    }
+
+    func testSourcePickerHidesArchiveAndPreventsSelectingAncestors() throws {
+        let payload = #"{"path":"","parentPath":null,"entries":[{"name":"archive","path":"/share/CACHEDEV2_DATA/archive"},{"name":"upload","path":"/share/CACHEDEV1_DATA/ssd/upload"},{"name":"archive-old","path":"/share/CACHEDEV2_DATA/archive-old"}]}"#
+        let listing = try JSONDecoder().decode(DirectoryListing.self, from: Data(payload.utf8))
+        let source = sourceDirectoryListing(listing, archiveBase: "/share/archive")
+        XCTAssertEqual(source.entries.map(\.name), ["upload", "archive-old"])
+        XCTAssertFalse(source.selectable ?? true)
+        var ancestor = listing
+        ancestor.path = "/share"
+        XCTAssertFalse(sourceDirectoryListing(ancestor, archiveBase: "/share/archive").selectable ?? true)
+        var nested = listing
+        nested.path = "/share/archive/photos"
+        XCTAssertFalse(sourceDirectoryListing(nested, archiveBase: "/share/archive").selectable ?? true)
+        var broad = listing
+        broad.entries = [RemoteDirectory(name: "share", path: "/share")]
+        XCTAssertFalse(sourceDirectoryListing(broad, archiveBase: "/share/archive").entries[0].selectable ?? true)
     }
 
     func testEmptyReadyPreviewOffersRescanInsteadOfArchive() throws {
@@ -72,7 +89,7 @@ final class ClientTests: XCTestCase {
         job.started = false
         XCTAssertFalse(job.canStart)
         XCTAssertTrue(job.canRescan)
-        XCTAssertEqual(job.statusLabel, "等待檔案")
+        XCTAssertEqual(job.statusLabel, "等待文件")
         job.totalFiles = 1
         XCTAssertTrue(job.canStart)
         XCTAssertTrue(job.canRescan)
@@ -169,7 +186,7 @@ final class ClientTests: XCTestCase {
             _ = try await client.info()
             XCTFail("Expected server error")
         } catch {
-            XCTAssertEqual(error.localizedDescription, "連線密碼不正確，請重新輸入。")
+            XCTAssertEqual(error.localizedDescription, "连接密码不正确，请重新输入。")
             XCTAssertFalse(error.localizedDescription.contains("private-token"))
         }
     }
@@ -193,7 +210,7 @@ private final class UnauthorizedProtocol: URLProtocol, @unchecked Sendable {
     override func startLoading() {
         let response = HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(#"{"error":{"code":"unauthorized","message":"權杖已失效"}}"#.utf8))
+        client?.urlProtocol(self, didLoad: Data(#"{"error":{"code":"unauthorized","message":"权杖已失效"}}"#.utf8))
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}

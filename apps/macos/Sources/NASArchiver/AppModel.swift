@@ -24,14 +24,14 @@ final class AppModel: ObservableObject {
     private var connectionTask: Task<Void, Never>?
     private var updatesTask: Task<Void, Never>?
     private var isStreaming = false
-    private let pollingMessage = "即時連線正在重連，每 3 秒更新任務。"
+    private let pollingMessage = "即时连接正在重连，每 3 秒更新任务。"
     private var selectedJobForConnection: [UUID: String] = [:]
     private var offeredArchiveOnboarding: Set<UUID> = []
 
     var selectedConnection: NASConnection? { connections.first { $0.id == selectedConnectionID } }
     var selectedJob: ArchiveJob? { jobs.first { $0.id == selectedJobID } }
     var needsArchiveOnboarding: Bool { isConnected && jobs.isEmpty }
-    var connectionLabel: String { isConnecting ? "正在連線" : (isConnected ? "已連線" : "未連線") }
+    var connectionLabel: String { isConnecting ? "正在连接" : (isConnected ? "已连接" : "未连接") }
 
     init(defaults: UserDefaults = .standard, session: URLSession = .shared) {
         self.defaults = defaults
@@ -53,7 +53,7 @@ final class AppModel: ObservableObject {
         connectionTask = Task {
             do {
                 let token = try TokenStore.token(for: connection.id)
-                guard !token.isEmpty else { throw ServiceError(message: "請在目前服務端設定中填寫連線密碼。") }
+                guard !token.isEmpty else { throw ServiceError(message: "请在目前服务端设置中填写连接密码。") }
                 let api = try APIClient(address: connection.address, token: token, session: session)
                 let info = try await api.info()
                 let values = try await api.jobs()
@@ -72,7 +72,7 @@ final class AppModel: ObservableObject {
 
     func saveConnection(_ connection: NASConnection, token: String) async throws {
         _ = try APIClient(address: connection.address, token: token, session: session)
-        guard !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ServiceError(message: "請填寫服務端生成的連線密碼。") }
+        guard !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ServiceError(message: "请填写服务端生成的连接密码。") }
         try TokenStore.save(token.trimmingCharacters(in: .whitespacesAndNewlines), for: connection.id)
         var next = connections
         if let index = next.firstIndex(where: { $0.id == connection.id }) { next[index] = connection }
@@ -85,7 +85,7 @@ final class AppModel: ObservableObject {
         await attempt?.value
         try Task.checkCancellation()
         guard selectedConnectionID == connection.id, isConnected else {
-            throw ServiceError(message: errorMessage ?? "無法連線，請檢查服務地址與密碼。")
+            throw ServiceError(message: errorMessage ?? "无法连接，请检查服务地址与密码。")
         }
     }
 
@@ -103,7 +103,7 @@ final class AppModel: ObservableObject {
     }
 
     func api() throws -> APIClient {
-        guard let client else { throw ServiceError(message: "請先連線服務端。") }
+        guard let client else { throw ServiceError(message: "请先连接服务端。") }
         return client
     }
 
@@ -170,7 +170,7 @@ final class AppModel: ObservableObject {
     }
 
     func reviewFile(_ file: ArchiveFile, job: ArchiveJob, dateTime: String? = nil) async throws {
-        guard !isPerformingAction else { throw ServiceError(message: "請等待目前操作完成。") }
+        guard !isPerformingAction else { throw ServiceError(message: "请等待目前操作完成。") }
         isPerformingAction = true
         let connectionID = selectedConnectionID
         defer { isPerformingAction = false }
@@ -194,7 +194,7 @@ final class AppModel: ObservableObject {
                     // Losing SSE does not invalidate the authenticated HTTP client.
                     // The fallback poll determines whether the server is reachable.
                     isStreaming = false
-                    updatesMessage = "即時連線暫時中斷，正在重新連線。\n\(presentableError(error))"
+                    updatesMessage = "即时连接暂时中断，正在重新连接。\n\(presentableError(error))"
                 }
                 for _ in 0..<5 {
                     do {
@@ -207,7 +207,7 @@ final class AppModel: ObservableObject {
                     } catch is CancellationError { return } catch {
                         guard !Task.isCancelled, selectedConnectionID == connectionID else { return }
                         isConnected = false
-                        updatesMessage = "服務端暫時無法存取，正在重連。任務仍由服務端執行。"
+                        updatesMessage = "服务端暂时无法访问，正在重连。任务仍由服务端执行。"
                     }
                 }
             }
@@ -236,8 +236,8 @@ final class AppModel: ObservableObject {
         guard defaults.bool(forKey: "completionNotifications"), let previous,
               !previous.isTerminal, job.isTerminal else { return }
         let content = UNMutableNotificationContent()
-        content.title = job.failedFiles == 0 ? "歸檔完成" : "歸檔完成，有檔案需要關注"
-        content.body = "\(job.name)：已歸檔 \(job.completedFiles)，略過重複 \(job.skippedFiles ?? 0)。"
+        content.title = job.failedFiles == 0 ? "归档完成" : "归档完成，有文件需要关注"
+        content.body = "\(job.name)：已归档 \(job.completedFiles)，跳过重复 \(job.skippedFiles ?? 0)。"
         let request = UNNotificationRequest(identifier: job.id, content: content, trigger: nil)
         Task { try? await UNUserNotificationCenter.current().add(request) }
     }

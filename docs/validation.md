@@ -176,3 +176,32 @@ Validation after the move: Go race tests/vet, local/Linux ARM64/Linux ARMv7 buil
 real-process HTTP smoke checks, all 20 Swift tests, Mac app packaging/signature
 checks, and QNAP lifecycle tests/staging. No production NAS restart is needed for
 this source-layout change.
+
+## Version 0.2.6 Simplified Chinese and focused source selection
+
+Converted all native App strings and bundle localization to Simplified Chinese,
+including settings, connection prompts, task actions and notifications. The new
+archive sheet removes its subtitle, repeated path footer, classification guide
+and explanatory paragraphs. It retains source selection, archive destination and
+two concise options, with details in help hints. The destination displays the
+friendly QNAP share path rather than a physical CACHEDEV path.
+
+The source-purpose browse endpoint hides archive/state directories and aliases,
+marks their ancestors as non-selectable, supports per-job destinations and
+preserves existing generic browse/inspection permissions. The client filters old
+responses as a compatibility fallback and auto-opens a single source root. No
+ROOTS configuration or filesystem access scope is expanded.
+
+Go race tests/vet passed, including source/target separation, symlink aliases,
+ancestor navigation and custom destinations. Swift tests: 21 passed, including
+source filtering against canonical/share aliases and older response decoding.
+
+Deployed 0.2.6 on the idle QNAP after a state backup; verified the registry/API
+version and installed executable digest. The live source catalog contains only
+`upload`, with its batch folders visible, while the generic access roots remain
+unchanged. Native screenshots verified Simplified Chinese menus and controls,
+the reduced 900×560 archive dialog, automatic entry into `/share/ssd/upload`, the
+friendly `/share/archive` destination, and absence of `archive` in the home
+source list. Manually browsing the archive destination produced a Chinese
+rejection message, and the picker was restored to upload without creating or
+starting any task.

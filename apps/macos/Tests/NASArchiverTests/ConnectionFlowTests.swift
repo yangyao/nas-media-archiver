@@ -28,7 +28,7 @@ final class ConnectionFlowTests: XCTestCase {
     }
 
     func testWrongPasswordDoesNotCompleteConnection() async throws {
-        try await assertConnectionFailure(token: "wrong-connection-test-token", expected: "連線密碼不正確")
+        try await assertConnectionFailure(token: "wrong-connection-test-token", expected: "连接密码不正确")
     }
 
     func testInitialTaskLoadFailureDoesNotCompleteConnection() async throws {

@@ -18,7 +18,7 @@ struct JobDetailView: View {
                     HStack(spacing: 8) {
                         Text(job.name).font(.title2.weight(.semibold)).textSelection(.enabled)
                         if let ordinal = taskOrdinal(job, among: model.jobs) {
-                            TaskRunBadge(ordinal: ordinal).help("建立於 \(job.creationDescription)")
+                            TaskRunBadge(ordinal: ordinal).help("建立于 \(job.creationDescription)")
                         }
                     }
                     Spacer(minLength: 12)
@@ -35,7 +35,7 @@ struct JobDetailView: View {
             fileToolbar
             if let fileError { StatusBanner(message: fileError, systemImage: "exclamationmark.triangle", isError: true) }
             if files.isEmpty && !loadingFiles {
-                Text(filter == .all ? "" : "沒有這類檔案")
+                Text(filter == .all ? "" : "没有这类文件")
                     .font(.callout).foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List {
@@ -45,7 +45,7 @@ struct JobDetailView: View {
                     if files.count < totalFiles {
                         HStack {
                             Spacer()
-                            Button("載入更多") { loadFiles(reset: false) }.buttonStyle(.glass).disabled(loadingFiles)
+                            Button("加载更多") { loadFiles(reset: false) }.buttonStyle(.glass).disabled(loadingFiles)
                             Spacer()
                         }.padding(10)
                     }
@@ -75,11 +75,11 @@ struct JobDetailView: View {
                 Image(systemName: "folder")
                 Text(job.sourcePaths.map(displayRemotePath).joined(separator: ", ")).lineLimit(1).truncationMode(.middle)
                     .help(job.sourcePaths.joined(separator: "\n"))
-                    .contextMenu { Button("複製來源路徑") { copyRemotePath(job.sourcePaths.joined(separator: "\n")) } }
+                    .contextMenu { Button("复制来源路径") { copyRemotePath(job.sourcePaths.joined(separator: "\n")) } }
             }
             Image(systemName: "arrow.right").font(.caption2)
             Text(displayRemotePath(job.archiveBase)).lineLimit(1).truncationMode(.middle).help(job.archiveBase)
-                .contextMenu { Button("複製歸檔路徑") { copyRemotePath(job.archiveBase) } }
+                .contextMenu { Button("复制归档路径") { copyRemotePath(job.archiveBase) } }
         }.font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
     }
 
@@ -87,14 +87,14 @@ struct JobDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 if job.status == "scanning" {
-                    Text("掃描 · \(job.totalFiles) 個 · \(formattedBytes(job.totalBytes))")
+                    Text("扫描 · \(job.totalFiles) 个 · \(formattedBytes(job.totalBytes))")
                 } else if job.status == "ready" {
-                    Text(job.supportedFiles == 0 ? "沒有可歸檔的檔案" : "\(job.supportedFiles) 個檔案 · \(formattedBytes(job.supportedBytes))")
+                    Text(job.supportedFiles == 0 ? "没有可归档的文件" : "\(job.supportedFiles) 个文件 · \(formattedBytes(job.supportedBytes))")
                 } else if job.isTerminal {
-                    Text("已歸檔 \(job.completedFiles) 個 · \(formattedBytes(job.completedBytes))")
-                    if (job.skippedFiles ?? 0) > 0 { Text("· 略過 \(job.skippedFiles ?? 0) 個") }
+                    Text("已归档 \(job.completedFiles) 个 · \(formattedBytes(job.completedBytes))")
+                    if (job.skippedFiles ?? 0) > 0 { Text("· 跳过 \(job.skippedFiles ?? 0) 个") }
                 } else {
-                    Text("\(job.processedFiles) / \(job.supportedFiles) 個 · \(formattedBytes(min(job.supportedBytes, job.processedBytes + job.currentFileBytes))) / \(formattedBytes(job.supportedBytes))")
+                    Text("\(job.processedFiles) / \(job.supportedFiles) 个 · \(formattedBytes(min(job.supportedBytes, job.processedBytes + job.currentFileBytes))) / \(formattedBytes(job.supportedBytes))")
                 }
                 Spacer()
                 if ["paused", "pausing", "queued", "interrupted"].contains(job.status) {
@@ -115,10 +115,10 @@ struct JobDetailView: View {
 
     private var fileToolbar: some View {
         HStack {
-            Text("檔案").font(.headline)
+            Text("文件").font(.headline)
             Spacer()
             Menu {
-                Picker("顯示檔案", selection: $filter) {
+                Picker("显示文件", selection: $filter) {
                     ForEach(FileFilter.allCases) { value in Text(filterLabel(value)).tag(value) }
                 }.pickerStyle(.inline)
             } label: {
@@ -144,34 +144,34 @@ struct JobDetailView: View {
         HStack(spacing: 10) {
             if job.canStart {
                 Menu {
-                    Toggle("略過重複（保留來源）", isOn: Binding(
+                    Toggle("跳过重复（保留来源）", isOn: Binding(
                         get: { job.skipDuplicates ?? false },
                         set: { enabled in Task { await model.setSkipDuplicates(enabled, job: job) } }
                     ))
                 } label: { Image(systemName: "ellipsis") }
-                    .menuStyle(.button).buttonStyle(.glass).menuIndicator(.hidden).help("歸檔選項")
+                    .menuStyle(.button).buttonStyle(.glass).menuIndicator(.hidden).help("归档选项")
             }
             if job.needsRescan {
-                Button("重新掃描", systemImage: "arrow.clockwise") { Task { await model.perform("retry", job: job) } }
+                Button("重新扫描", systemImage: "arrow.clockwise") { Task { await model.perform("retry", job: job) } }
                     .buttonStyle(.glassProminent)
             }
             if job.canRescan {
                 if job.supportedFiles == 0 {
-                    Button("重新掃描", systemImage: "arrow.clockwise") { Task { await model.perform("rescan", job: job) } }.buttonStyle(.glassProminent)
+                    Button("重新扫描", systemImage: "arrow.clockwise") { Task { await model.perform("rescan", job: job) } }.buttonStyle(.glassProminent)
                 } else {
-                    Button("重新掃描", systemImage: "arrow.clockwise") { Task { await model.perform("rescan", job: job) } }.buttonStyle(.glass)
+                    Button("重新扫描", systemImage: "arrow.clockwise") { Task { await model.perform("rescan", job: job) } }.buttonStyle(.glass)
                 }
             }
             if job.canStart {
-                Button(job.status == "ready" ? "開始歸檔" : "繼續", systemImage: "play.fill") {
+                Button(job.status == "ready" ? "开始归档" : "继续", systemImage: "play.fill") {
                     Task { await model.perform("start", job: job) }
                 }.buttonStyle(.glassProminent)
             }
             if job.canPause {
-                Button("暫停", systemImage: "pause.fill") { Task { await model.perform("pause", job: job) } }.buttonStyle(.glass)
+                Button("暂停", systemImage: "pause.fill") { Task { await model.perform("pause", job: job) } }.buttonStyle(.glass)
             }
             if job.isTerminal && (job.failedFiles > 0 || job.status == "failed") {
-                Button("重試失敗檔案", systemImage: "arrow.clockwise") { Task { await model.perform("retry", job: job) } }.buttonStyle(.glass)
+                Button("重试失败文件", systemImage: "arrow.clockwise") { Task { await model.perform("retry", job: job) } }.buttonStyle(.glass)
             }
         }.buttonBorderShape(.capsule).controlSize(.regular)
             .disabled(model.isPerformingAction || !model.isConnected)
@@ -180,12 +180,12 @@ struct JobDetailView: View {
     private var completionActions: some View {
         HStack(spacing: 12) {
             if job.cleanupStatus == "done" {
-                Label("空目錄已清理", systemImage: "checkmark.circle").font(.caption).foregroundStyle(.secondary)
+                Label("空目录已清理", systemImage: "checkmark.circle").font(.caption).foregroundStyle(.secondary)
             } else {
-                Button("查看來源內容", systemImage: "folder") {
+                Button("查看来源内容", systemImage: "folder") {
                     folderTarget = FolderTarget(path: job.residualPaths.first ?? job.sourcePaths.first ?? "")
                 }.buttonStyle(.glass)
-                Button("清理空目錄", systemImage: "folder.badge.minus") { Task { await model.perform("cleanup", job: job) } }
+                Button("清理空目录", systemImage: "folder.badge.minus") { Task { await model.perform("cleanup", job: job) } }
                     .buttonStyle(.glass).disabled(model.isPerformingAction || !model.isConnected)
             }
         }.buttonBorderShape(.capsule).controlSize(.small)
@@ -231,21 +231,21 @@ struct FileRow: View {
                         if let advice = file.reviewAdvice { Text(advice).foregroundStyle(.secondary) }
                     }
                 }
-                LabeledContent("來源", value: file.sourcePath)
-                if !file.targetPath.isEmpty { LabeledContent("歸檔", value: file.targetPath) }
+                LabeledContent("来源", value: file.sourcePath)
+                if !file.targetPath.isEmpty { LabeledContent("归档", value: file.targetPath) }
                 if !file.dateTime.isEmpty { LabeledContent("日期", value: file.dateTime) }
-                if !file.metadataSource.isEmpty { LabeledContent("日期來源", value: file.metadataLabel) }
+                if !file.metadataSource.isEmpty { LabeledContent("日期来源", value: file.metadataLabel) }
                 if !file.error.isEmpty { Text(file.error).foregroundStyle(.red) }
                 HStack(spacing: 10) {
                     if file.status == "unsupported" || file.status == "skipped" || file.status == "failed" {
-                        Button("查看來源") { onBrowse((file.sourcePath as NSString).deletingLastPathComponent) }.buttonStyle(.glass)
+                        Button("查看来源") { onBrowse((file.sourcePath as NSString).deletingLastPathComponent) }.buttonStyle(.glass)
                     }
-                    Button("複製路徑") { copyRemotePath(file.status == "completed" ? file.targetPath : file.sourcePath) }.buttonStyle(.glass)
+                    Button("复制路径") { copyRemotePath(file.status == "completed" ? file.targetPath : file.sourcePath) }.buttonStyle(.glass)
                     if canEditDate && file.needsDateReview {
-                        Button("設定日期…") { editDate = true }.buttonStyle(.glass)
+                        Button("设置日期…") { editDate = true }.buttonStyle(.glass)
                     }
                     if canReview && !file.warning.isEmpty && file.status != "unsupported" && file.status != "failed" {
-                        Button("確認資訊", systemImage: "checkmark") {
+                        Button("确认信息", systemImage: "checkmark") {
                             Task {
                                 do { try await model.reviewFile(file, job: job); onChanged() }
                                 catch { reviewError = presentableError(error) }
@@ -253,7 +253,7 @@ struct FileRow: View {
                         }.buttonStyle(.glass).disabled(model.isPerformingAction)
                     }
                     if job.isTerminal && file.status == "failed" {
-                        Button("重試失敗檔案") { Task { await model.perform("retry", job: job) } }.buttonStyle(.glass)
+                        Button("重试失败文件") { Task { await model.perform("retry", job: job) } }.buttonStyle(.glass)
                     }
                 }.controlSize(.small).textSelection(.disabled)
                 if let reviewError { Text(reviewError).foregroundStyle(.red) }
@@ -292,15 +292,15 @@ private struct CaptureDateView: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("設定拍攝日期").font(.title3.weight(.semibold))
+            Text("设置拍摄日期").font(.title3.weight(.semibold))
             Text(file.name).font(.callout).foregroundStyle(.secondary)
-            DatePicker("拍攝日期", selection: $date, displayedComponents: [.date, .hourAndMinute])
-            Text("更新歸檔日期與目標位置，不會修改原始檔案。").font(.caption).foregroundStyle(.secondary)
+            DatePicker("拍摄日期", selection: $date, displayedComponents: [.date, .hourAndMinute])
+            Text("更新归档日期与目标位置，不会修改原始文件。").font(.caption).foregroundStyle(.secondary)
             if let error { Text(error).font(.caption).foregroundStyle(.red) }
             HStack {
                 Spacer()
                 Button("取消") { dismiss() }.buttonStyle(.glass).keyboardShortcut(.cancelAction)
-                Button("儲存") {
+                Button("储存") {
                     saving = true
                     Task {
                         defer { saving = false }
