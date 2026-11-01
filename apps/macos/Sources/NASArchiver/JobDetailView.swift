@@ -222,27 +222,63 @@ struct FileRow: View {
     private var canReview: Bool { job.canStart || job.isTerminal }
     private var canEditDate: Bool { job.canStart && ["planned", "failed"].contains(file.status) && file.sha256.isEmpty }
 
+    private var hasReviewActions: Bool {
+        ["unsupported", "skipped", "failed"].contains(file.status)
+            || (canReview && !file.warning.isEmpty)
+    }
+
+    private func pathRow(_ title: String, path: String) -> some View {
+        GridRow(alignment: .firstTextBaseline) {
+            Text(title).foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Text(displayRemotePath(path))
+                    .lineLimit(1).truncationMode(.middle)
+                    .help(path)
+                Button { copyRemotePath(path) } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("复制\(title)路径")
+                .accessibilityLabel("复制\(title)路径")
+                .textSelection(.disabled)
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
     var body: some View {
         DisclosureGroup {
             VStack(alignment: .leading, spacing: 12) {
-                if let title = file.reviewTitle {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(title).font(.callout.weight(.medium))
-                        if let advice = file.reviewAdvice { Text(advice).foregroundStyle(.secondary) }
+                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                    pathRow("来源", path: file.sourcePath)
+                    if !file.targetPath.isEmpty { pathRow("归档", path: file.targetPath) }
+                    if !file.dateTime.isEmpty {
+                        GridRow(alignment: .firstTextBaseline) {
+                            Text("日期").foregroundStyle(.secondary)
+                            HStack(spacing: 8) {
+                                Text(file.dateTime.prefix(19).replacingOccurrences(of: "T", with: " "))
+                                    .help(file.dateTime)
+                                if !file.metadataSource.isEmpty {
+                                    Text("· \(file.metadataLabel)").foregroundStyle(.secondary)
+                                        .help(file.needsDateReview ? "未找到拍摄日期，已使用文件修改日期。" : file.metadataLabel)
+                                }
+                                if canEditDate && file.needsDateReview {
+                                    Button("修改…") { editDate = true }.buttonStyle(.link)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                        }
                     }
                 }
-                LabeledContent("来源", value: file.sourcePath)
-                if !file.targetPath.isEmpty { LabeledContent("归档", value: file.targetPath) }
-                if !file.dateTime.isEmpty { LabeledContent("日期", value: file.dateTime) }
-                if !file.metadataSource.isEmpty { LabeledContent("日期来源", value: file.metadataLabel) }
+                if !file.needsDateReview, let advice = file.reviewAdvice {
+                    Text(advice).foregroundStyle(.secondary)
+                }
                 if !file.error.isEmpty { Text(file.error).foregroundStyle(.red) }
+                if hasReviewActions {
                 HStack(spacing: 10) {
                     if file.status == "unsupported" || file.status == "skipped" || file.status == "failed" {
                         Button("查看来源") { onBrowse((file.sourcePath as NSString).deletingLastPathComponent) }.buttonStyle(.glass)
-                    }
-                    Button("复制路径") { copyRemotePath(file.status == "completed" ? file.targetPath : file.sourcePath) }.buttonStyle(.glass)
-                    if canEditDate && file.needsDateReview {
-                        Button("设置日期…") { editDate = true }.buttonStyle(.glass)
                     }
                     if canReview && !file.warning.isEmpty && file.status != "unsupported" && file.status != "failed" {
                         Button("确认信息", systemImage: "checkmark") {
@@ -256,6 +292,7 @@ struct FileRow: View {
                         Button("重试失败文件") { Task { await model.perform("retry", job: job) } }.buttonStyle(.glass)
                     }
                 }.controlSize(.small).textSelection(.disabled)
+                }
                 if let reviewError { Text(reviewError).foregroundStyle(.red) }
             }.font(.caption).textSelection(.enabled).padding(.vertical, 10)
         } label: {
