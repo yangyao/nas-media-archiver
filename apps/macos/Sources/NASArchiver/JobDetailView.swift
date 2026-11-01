@@ -259,9 +259,10 @@ struct FileRow: View {
                 if let reviewError { Text(reviewError).foregroundStyle(.red) }
             }.font(.caption).textSelection(.enabled).padding(.vertical, 10)
         } label: {
-            HStack(spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Image(systemName: file.status == "completed" ? "checkmark.circle" : (file.reviewTitle == nil ? "doc" : "exclamationmark.circle"))
                     .foregroundStyle(file.status == "failed" ? Color.red : Color.secondary)
+                    .frame(width: 20)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(file.name).lineLimit(1)
                     if let title = file.reviewTitle { Text(title).font(.caption).foregroundStyle(.secondary) }
@@ -271,8 +272,36 @@ struct FileRow: View {
                 Text(file.statusLabel).font(.caption).foregroundStyle(.secondary).frame(width: 74, alignment: .trailing)
             }.padding(.vertical, 5)
         }
+        .disclosureGroupStyle(FileDisclosureStyle())
         .sheet(isPresented: $editDate) {
             CaptureDateView(file: file, job: job, onChanged: onChanged).environmentObject(model)
+        }
+    }
+}
+
+// Keep the disclosure indicator on the filename baseline even when a row has
+// a second line of review information.
+private struct FileDisclosureStyle: DisclosureGroupStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                configuration.isExpanded.toggle()
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: configuration.isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12)
+                    configuration.label
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(configuration.isExpanded ? "已展开" : "已折叠")
+            .accessibilityHint("显示或隐藏文件详情")
+            if configuration.isExpanded {
+                configuration.content.padding(.leading, 20)
+            }
         }
     }
 }
