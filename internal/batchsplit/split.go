@@ -82,10 +82,11 @@ func New(source, prefix string, limit int64) (Plan, error) {
 	if len(p.Prefix) > 120 || strings.ContainsAny(p.Prefix, "/\\\x00\r\n") || strings.HasPrefix(p.Prefix, ".") {
 		return p, errors.New("批次名称不可包含路径或以点开头")
 	}
+	p.Prefix = strings.Join(strings.Fields(p.Prefix), "_")
 	next := 1
 	newBatch := func() error {
 		for {
-			path := filepath.Join(filepath.Dir(p.Source), fmt.Sprintf("%s batch %02d", p.Prefix, next))
+			path := filepath.Join(filepath.Dir(p.Source), fmt.Sprintf("%s_batch_%02d", p.Prefix, next))
 			next++
 			if next > 100001 {
 				return errors.New("批次数量过多")

@@ -34,7 +34,7 @@ func TestSmallDirectoryStillCreatesSiblingAndPreservesMetadata(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if len(p.Batches) != 1 || filepath.Base(p.Batches[0].Path) != "iPhone 15 batch 01" || p.RetainedEntries != 2 {
+	if len(p.Batches) != 1 || filepath.Base(p.Batches[0].Path) != "iPhone_15_batch_01" || p.RetainedEntries != 2 {
 		t.Fatal(p)
 	}
 	if _, e = os.Stat(p.Batches[0].Path); !os.IsNotExist(e) {
@@ -67,7 +67,7 @@ func TestSmallDirectoryStillCreatesSiblingAndPreservesMetadata(t *testing.T) {
 }
 func TestSizeBoundsCollisionsAndNestedPaths(t *testing.T) {
 	root, src := fixture(t)
-	os.Mkdir(filepath.Join(root, "iPhone 15 batch 01"), 0755)
+	os.Mkdir(filepath.Join(root, "iPhone_15_batch_01"), 0755)
 	put(t, filepath.Join(src, "nested", "a"), "1234")
 	put(t, filepath.Join(src, "nested", "b"), "5678")
 	put(t, filepath.Join(src, "z"), "oversized")
@@ -75,7 +75,7 @@ func TestSizeBoundsCollisionsAndNestedPaths(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if len(p.Batches) != 3 || filepath.Base(p.Batches[0].Path) != "iPhone 15 batch 02" || !p.Batches[2].Oversized {
+	if len(p.Batches) != 3 || filepath.Base(p.Batches[0].Path) != "iPhone_15_batch_02" || !p.Batches[2].Oversized {
 		t.Fatal(p)
 	}
 	if e = p.Reserve(); e != nil {

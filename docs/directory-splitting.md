@@ -3,17 +3,18 @@
 在 Mac 菜单选择“工具 → 拆分目录”，选择服务端目录，填写批次名称后点击“预览”。
 确认目录列表后，由用户点击“开始拆分”。默认每批最多 **8 GB（8,000,000,000 字节）**。
 
-例如来源 `/share/ssd/upload/iphone15`，批次名称 `iPhone 15`：
+例如来源 `/share/ssd/upload/iphone15`，批次名称 `iphone15`：
 
 ```text
 upload/
   iphone15/               # 原目录保留，隐藏同步项目留在这里
-  iPhone 15 batch 01/
-  iPhone 15 batch 02/
+  iphone15_batch_01/
+  iphone15_batch_02/
 ```
 
 不足 8 GB 也会移到一个平级批次；没有普通文件时不创建目录。
 文件保持完整，单个文件超限时独立成批并显示提示，不拆碎视频。
+批次目录使用下划线命名，如 `iphone15_batch_01`；输入名称中的空白会自动转为下划线。
 已有批次不会覆盖，编号会顺延。关闭工具后可以重新打开查看进度与最近任务。
 重启或失败后点击“继续拆分”核对和恢复；文件在预览后变化时需重新预览。
 
@@ -25,9 +26,9 @@ upload/
 ```sh
 make build
 # 默认只读预览
-scripts/split-directory.sh --path /path/to/iphone15 --prefix 'iPhone 15'
+scripts/split-directory.sh --path /path/to/iphone15 --prefix iphone15
 # 显式移动；恢复计划放在来源目录之外的持久存储上
-scripts/split-directory.sh --path /path/to/iphone15 --prefix 'iPhone 15' \
+scripts/split-directory.sh --path /path/to/iphone15 --prefix iphone15 \
   --apply --plan-file /persistent/plans/iphone15.json
 # 中断后继续同一计划
 scripts/split-directory.sh --resume --apply --plan-file /persistent/plans/iphone15.json

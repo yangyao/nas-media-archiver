@@ -52,7 +52,7 @@ func TestSplitAPIRequiresExplicitExecutionAndPreservesSource(t *testing.T) {
 	if result["status"] != "completed" {
 		t.Fatal(result)
 	}
-	dst := filepath.Join(filepath.Dir(src), "iPhone 15 batch 01", "a.jpg")
+	dst := filepath.Join(filepath.Dir(src), "iPhone_15_batch_01", "a.jpg")
 	b, e := os.ReadFile(dst)
 	if e != nil || string(b) != "media" {
 		t.Fatal(e)

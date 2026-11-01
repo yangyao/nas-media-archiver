@@ -111,7 +111,7 @@ struct SplitDirectoryView: View {
             }
             HStack {
                 Text("批次名称").foregroundStyle(.secondary)
-                TextField("例如 iPhone 15", text: $prefix)
+                TextField("例如 iphone15", text: $prefix)
                     .onChange(of: prefix) { _, value in if job?.status == "preview", value != job?.prefix { job = nil } }
                     .disabled(job != nil && job?.status != "preview")
                 Text("每批 8 GB").foregroundStyle(.secondary)
@@ -165,8 +165,7 @@ struct SplitDirectoryView: View {
         guard let p = listing?.path, !p.isEmpty else { return }
         source = p; job = nil; error = nil; choosing = false
         let name = (displayRemotePath(p) as NSString).lastPathComponent
-        if name.lowercased().hasPrefix("iphone"), let number = Int(name.dropFirst(6)) { prefix = "iPhone \(number)" }
-        else { prefix = name }
+        prefix = name.split(whereSeparator: { $0.isWhitespace }).joined(separator: "_")
     }
     private func browse(_ value: String) async {
         busy = true; error = nil; listing = nil
