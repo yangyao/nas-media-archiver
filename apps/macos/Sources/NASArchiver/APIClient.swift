@@ -59,8 +59,8 @@ struct APIClient: Sendable {
     func saveArchiveSettings(_ value: ArchiveSettings) async throws -> ArchiveSettings {
         try await fetch(ArchiveSettings.self, path: "settings", method: "PUT", body: JSONEncoder().encode(value))
     }
-    func previewSplit(source: String, prefix: String) async throws -> DirectorySplitJob {
-        try await fetch(DirectorySplitJob.self, path: "tools/splits/preview", method: "POST", body: JSONEncoder().encode(["sourcePath": source, "prefix": prefix]))
+    func previewSplit(source: String) async throws -> DirectorySplitJob {
+        try await fetch(DirectorySplitJob.self, path: "tools/splits/preview", method: "POST", body: JSONEncoder().encode(["sourcePath": source]))
     }
     func startSplit(_ id: String) async throws -> DirectorySplitJob { try await fetch(DirectorySplitJob.self, path: "tools/splits/\(id)/start", method: "POST") }
     func splitJob(_ id: String) async throws -> DirectorySplitJob { try await fetch(DirectorySplitJob.self, path: "tools/splits/\(id)") }

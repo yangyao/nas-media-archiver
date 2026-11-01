@@ -28,7 +28,6 @@ struct SplitDirectoryView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var source = ""
-    @State private var prefix = ""
     @State private var job: DirectorySplitJob?
     @State private var history: [DirectorySplitJob] = []
     @State private var choosing = false
@@ -43,6 +42,7 @@ struct SplitDirectoryView: View {
             HStack {
                 Label("拆分目录", systemImage: "folder.badge.gearshape").font(.title2.weight(.semibold))
                 Spacer()
+                Text("每批 8 GB").font(.callout).foregroundStyle(.secondary)
                 if !history.isEmpty {
                     Menu("最近拆分") {
                         ForEach(history) { item in
@@ -74,7 +74,7 @@ struct SplitDirectoryView: View {
                     Button(job.status == "preview" ? "开始拆分" : "继续拆分") { Task { await start() } }
                         .buttonStyle(.glassProminent).disabled(busy)
                 } else if job?.status == "completed" {
-                    Button("新建拆分") { self.job = nil; source = ""; prefix = ""; error = nil; notice = nil }
+                    Button("新建拆分") { self.job = nil; source = ""; error = nil; notice = nil }
                         .buttonStyle(.glassProminent)
                 } else {
                     Button(busy ? "正在预览…" : "预览") { Task { await preview() } }
@@ -108,13 +108,6 @@ struct SplitDirectoryView: View {
                 Text(source.isEmpty ? "选择要拆分的目录" : displayRemotePath(source)).lineLimit(1).truncationMode(.middle).help(source)
                 Spacer()
                 Button("选择…") { choosing = true; Task { await browse("") } }.disabled(busy || job?.isRunning == true || (job != nil && job?.status != "preview"))
-            }
-            HStack {
-                Text("批次名称").foregroundStyle(.secondary)
-                TextField("例如 iphone15", text: $prefix)
-                    .onChange(of: prefix) { _, value in if job?.status == "preview", value != job?.prefix { job = nil } }
-                    .disabled(job != nil && job?.status != "preview")
-                Text("每批 8 GB").foregroundStyle(.secondary)
             }
             if let job {
                 if job.status == "preview" {
@@ -164,8 +157,6 @@ struct SplitDirectoryView: View {
     private func chooseCurrent() {
         guard let p = listing?.path, !p.isEmpty else { return }
         source = p; job = nil; error = nil; choosing = false
-        let name = (displayRemotePath(p) as NSString).lastPathComponent
-        prefix = name.split(whereSeparator: { $0.isWhitespace }).joined(separator: "_")
     }
     private func browse(_ value: String) async {
         busy = true; error = nil; listing = nil
@@ -179,7 +170,7 @@ struct SplitDirectoryView: View {
     private func preview() async {
         busy = true; error = nil
         defer { busy = false }
-        do { job = try await model.api().previewSplit(source: source, prefix: prefix) }
+        do { job = try await model.api().previewSplit(source: source) }
         catch { self.error = presentableError(error) }
     }
     private func start() async {
@@ -189,7 +180,7 @@ struct SplitDirectoryView: View {
         do { job = try await model.api().startSplit(id); await loadHistory(selectActive: false) }
         catch { self.error = presentableError(error) }
     }
-    private func select(_ value: DirectorySplitJob) { job = value; source = value.sourcePath; prefix = value.prefix; error = value.error.isEmpty ? nil : value.error }
+    private func select(_ value: DirectorySplitJob) { job = value; source = value.sourcePath; error = value.error.isEmpty ? nil : value.error }
     private func reload() async {
         guard let id = job?.id else { return }
         do { select(try await model.api().splitJob(id)) } catch { self.error = presentableError(error) }

@@ -177,7 +177,7 @@ Mac 连接只需地址与 Token，首次配置及后续修改均在客户端完�
 
 ### 拆分目录工具（0.2.8）
 
-- `POST /api/v1/tools/splits/preview`：`sourcePath`、`prefix`，可选 `maxBytes`
+- `POST /api/v1/tools/splits/preview`：`sourcePath`，可选 `prefix`（默认沿用来源目录名）与 `maxBytes`
   （默认 8,000,000,000 字节）。只读预览，返回 ID、文件/字节总量、批次目录列表。
 - `POST /api/v1/tools/splits/{id}/start`：显式执行或继续失败/中断的任务。
 - `GET /api/v1/tools/splits/{id}`：状态与进度。
