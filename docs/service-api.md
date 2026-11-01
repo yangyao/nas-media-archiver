@@ -174,3 +174,25 @@ folder names, job names and diagnostic paths are not converted.
 创建任务需先完成设置。旧安装的非空 archive-base 作为已有配置保留。
 QNAP 新安装的 ROOTS 默认 /share，archive-base 留空；管理员可缩小 ROOTS。
 Mac 连接只需地址与 Token，首次配置及后续修改均在客户端完成。
+
+### 拆分目录工具（0.2.8）
+
+- `POST /api/v1/tools/splits/preview`：`sourcePath`、`prefix`，可选 `maxBytes`
+  （默认 8,000,000,000 字节）。只读预览，返回 ID、文件/字节总量、批次目录列表。
+- `POST /api/v1/tools/splits/{id}/start`：显式执行或继续失败/中断的任务。
+- `GET /api/v1/tools/splits/{id}`：状态与进度。
+- `GET /api/v1/tools/splits`：已执行的任务记录，用于重新打开工具窗口。
+- `GET /info` 的 `capabilities.directorySplit` 标识是否支持此工具。
+
+批次是原目录的平级目录，命名 `{prefix} batch 01`；不足上限也生成一个批次。
+名称已占用时顺延编号；预览后出现同名路径或来源文件变化时拒绝开始，需重新预览。
+完整文件按相对路径顺序装入批次，保留内部路径，单文件超限时独立一批并提示。
+空目录不生成批次；点开头的文件/目录、符号链接及特殊文件留在原处，源根目录保留。
+仅处理预览中存在的文件，后来新增的文件保留在来源。隐藏目录计数按项目而非递归文件。
+
+来源与批次必须都在管理员授权和配置的来源范围内，不能与归档/服务数据目录重叠。
+拆分与归档任务互斥占用相关目录；关闭 Mac 不会取消执行。持久化计划保存于
+`state-dir/splits/*.json`（0600），单任务单执行者，仅开始/结束写状态；逐文件进度在内存。
+同一文件系统使用 no-overwrite 硬链接发布，目录 fsync 后移除来源文件名，保留文件元数据，
+不读取整个文件或计算哈希。重启后显式继续，通过原文件 inode/大小/mtime 恢复。
+跨文件系统不回退到复制，遇到错误会停止并保留文件。

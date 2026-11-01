@@ -23,6 +23,7 @@ type archiveService struct {
 	store           *serviceStore
 	token           string
 	jobs            map[string]*ServiceJob
+	splits          map[string]*SplitJob
 	wake            chan struct{}
 	stop            chan struct{}
 	closing         bool
@@ -97,6 +98,10 @@ func newArchiveService(config ServiceConfig) (*archiveService, error) {
 	}
 	s.config.ArchiveBase = archive
 	if err = s.loadSettings(); err != nil {
+		store.Close()
+		return nil, err
+	}
+	if err = s.loadSplitJobs(); err != nil {
 		store.Close()
 		return nil, err
 	}
@@ -469,6 +474,25 @@ func serviceAvailableTarget(base string, reserved map[string]bool) (string, bool
 }
 
 func (s *archiveService) checkClaims(paths []string, target, ignore string) error {
+	for id, split := range s.splits {
+		if id == ignore || split.Status == "preview" || split.Status == "completed" {
+			continue
+		}
+		occupied := []string{split.Plan.Source}
+		for _, b := range split.Plan.Batches {
+			occupied = append(occupied, b.Path)
+		}
+		for _, p := range occupied {
+			if pathsOverlap(target, p) {
+				return errors.New("目录正被拆分任务使用")
+			}
+			for _, source := range paths {
+				if pathsOverlap(source, p) {
+					return errors.New("目录正被拆分任务使用")
+				}
+			}
+		}
+	}
 	for id, other := range s.jobs {
 		if id == ignore || serviceTerminal(other.Status) {
 			continue

@@ -18,6 +18,10 @@ struct NASArchiverApp: App {
         .windowToolbarStyle(.unified)
         .defaultSize(width: 1080, height: 760)
         .commands {
+            CommandMenu("工具") {
+                Button("拆分目录…") { model.showDirectorySplit = true }
+                    .disabled(!model.isConnected || model.serverInfo?.capabilities?["directorySplit"] != true)
+            }
             CommandGroup(after: .newItem) {
                 Button("新建归档…") { model.showNewArchive = true }
                     .keyboardShortcut("n", modifiers: .command)

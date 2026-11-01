@@ -114,6 +114,10 @@ func serviceError(w http.ResponseWriter, status int, code, message string) {
 }
 func (s *archiveService) route(w http.ResponseWriter, r *http.Request) {
 	endpoint := strings.TrimPrefix(r.URL.Path, "/api/v1/")
+	if endpoint == "tools/splits" || strings.HasPrefix(endpoint, "tools/splits/") {
+		s.splitEndpoint(w, r)
+		return
+	}
 	switch endpoint {
 	case "settings":
 		s.settingsEndpoint(w, r)
@@ -292,7 +296,7 @@ func (s *archiveService) info(w http.ResponseWriter) {
 		path = parent
 	}
 	free := int64(stat.Bavail) * int64(stat.Bsize)
-	writeServiceJSON(w, 200, map[string]interface{}{"name": s.config.Name, "version": serviceVersion, "configured": settings.Configured, "archiveBase": settings.ArchiveBase, "roots": s.config.Roots, "freeBytes": free, "tools": tools, "persistence": s.store.status()})
+	writeServiceJSON(w, 200, map[string]interface{}{"name": s.config.Name, "version": serviceVersion, "capabilities": map[string]bool{"directorySplit": true}, "configured": settings.Configured, "archiveBase": settings.ArchiveBase, "roots": s.config.Roots, "freeBytes": free, "tools": tools, "persistence": s.store.status()})
 }
 
 // Source browsing is a view of the configured access roots, not a broader

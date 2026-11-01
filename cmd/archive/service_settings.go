@@ -84,6 +84,12 @@ func (s *archiveService) settingsEndpoint(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
+	for _, split := range s.splits {
+		if split.Status == "running" {
+			serviceError(w, 409, "busy", "请等待拆分完成后再修改设置。")
+			return
+		}
+	}
 	if len(v.SourceRoots) == 0 || len(v.SourceRoots) > 100 {
 		serviceError(w, 400, "invalid_settings", "请选择来源目录。")
 		return

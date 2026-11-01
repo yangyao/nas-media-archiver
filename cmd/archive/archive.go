@@ -266,6 +266,8 @@ func main() {
 		os.Exit(1)
 	}
 	switch os.Args[1] {
+	case "split-directory":
+		must(runSplitDirectory(os.Args[2:]))
 	case "serve":
 		must(runServe(os.Args[2:]))
 	case "scan":
@@ -292,6 +294,7 @@ func main() {
 
 func usage() {
 	fmt.Fprintf(os.Stderr, `archive commands:
+  split-directory --path <dir> [--prefix <name>] [--max-bytes 8000000000] [--apply --plan-file <file>]
   serve   [--listen 127.0.0.1:8787] [--state-dir <dir>] [--token-file <file>]
   scan    --path <dir> [--ext .jpg,.mp4] [--state-dir .archive-jobs]
   run     --job <job-id> --archive-base <dir> [--dry-run]

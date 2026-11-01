@@ -17,6 +17,7 @@ final class AppModel: ObservableObject {
     @Published var updatesMessage: String?
     @Published var connectionEditor: ConnectionEditorTarget?
     @Published var showNewArchive = false
+    @Published var showDirectorySplit = false
     @Published var showArchiveSettings = false
     var canCreateArchive: Bool { isConnected && serverInfo?.isConfigured == true }
 
