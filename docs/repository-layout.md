@@ -14,9 +14,10 @@ change its HTTP API, installation paths, persistent state or media layout.
 │   ├── service_*.go        Scheduling, persistence, scan/transfer and review
 │   ├── *_test.go           Unit, recovery, concurrency and regression tests
 │   └── web/index.html      Existing embedded service status page
+├── internal/batchsplit/   Shared sibling-batch planner and safe move/recovery engine
 ├── apps/macos/             Swift package, native client tests and app assets
 ├── packaging/qnap/         QDK inputs, lifecycle scripts and package checks
-├── scripts/                Real-process HTTP smoke test
+├── scripts/                Real-process HTTP smoke test and split-directory CLI wrapper
 ├── docs/                   User, API, architecture and validation documentation
 └── dist/                   Generated executables/installers (not tracked)
 ```

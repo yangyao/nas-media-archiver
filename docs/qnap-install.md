@@ -84,14 +84,17 @@ QDK's default icons are used until application icons are supplied.
    ```sh
    LISTEN="0.0.0.0:8787"
    NAME="My Archive Server"
-   ARCHIVE_BASE="/share/archive"
-   ROOTS="/share/ssd/upload,/share/archive"
+   ARCHIVE_BASE=""
+   ROOTS="/share"
    STOP_TIMEOUT="120"
    ```
 
-   Set existing source and destination locations appropriate to the NAS. Each
-   source and destination must be beneath one of the comma-separated `ROOTS`.
-   Keep the roots narrow. The service resolves symlinks and checks paths at
+   Review the listening port and administrator-controlled access boundary.
+   `ROOTS` defaults to `/share`; narrow it to the shared folders needed by the
+   application. Leave `ARCHIVE_BASE` empty for first-time setup in the Mac app.
+   Source roots and the archive destination selected in the app must stay within
+   `ROOTS`. Existing installations retain their previous configuration.
+   App settings are persisted separately under `state/settings.json`. The service resolves symlinks and checks paths at
    request time. Configuration uses shell syntax and is administrator-owned;
    it must not be writable by ordinary users. Do not add passwords or tokens.
 
@@ -103,6 +106,10 @@ QDK's default icons are used until application icons are supplied.
    read locally by an administrator from the data directory's `token` file.
    The Mac client saves it in a user-only local credential file, without Keychain access. The Web landing page and logs never
    expose the token.
+6. If the service has no archive settings yet, choose source folders and an
+   archive destination in the Mac app's first-time setup. Settings can later be
+   changed from the connection editor or the app settings. Directories are
+   validated before saving; active scan/archive/split operations block changes.
 
 The default listener is intentionally available on the LAN so the Mac client
 can connect. All filesystem/task APIs, including progress streams, require

@@ -1,177 +1,136 @@
-# nas-media-archiver
+<p align="center">
+  <img src="apps/macos/Assets/AppIcon.png" width="88" alt="NAS Archiver 应用图标">
+</p>
 
-面向 QNAP NAS 和 Linux 的照片、视频归档工具，提供 Go 服务端与命令行、原生 macOS 客户端，支持按日期归档、重复文件比对及安全校验。
+<h1 align="center">NAS Archiver</h1>
 
-文件扫描、归档和目录清理由服务端执行，关闭 Mac 客户端不会中断任务。支持 QNAP QPKG 安装，也可以直接在 Linux 主机上运行。
+<p align="center"><strong>在 Mac 上整理 NAS 照片，按日期归档，按大小分批。</strong></p>
 
-## 主要功能
+<p align="center">
+  <a href="#开始使用">开始使用</a> ·
+  <a href="#先看预览再开始归档">功能介绍</a> ·
+  <a href="#按-8-gb-拆成上传批次">拆分上传批次</a> ·
+  <a href="https://github.com/yangyao/nas-media-archiver/issues">反馈问题</a>
+</p>
 
-- 按日期归档到 `photos/YYYY/MM`、`videos/YYYY/MM` 和 `pngs/YYYY/MM`。
-- 使用 `YYYYMMDD_HHMMSS_size.ext` 命名，优先读取文件名或媒体元数据中的拍摄时间，缺失时回退到修改时间。
-- 可选择跳过内容相同的候选文件，保留来源；同名但内容不同的文件使用后缀另存，不覆盖已有文件。
-- 跨文件系统复制并校验，确认目标与来源内容一致后再移除来源。
-- 支持扫描预览、进度查看、暂停与继续、失败重试，以及空目录清理。
-- 尚未开始归档的任务可以重新扫描，更新新增或移除的文件。
-- 可查看来源目录中的残留文件，对需要关注的项目提供原因说明和处理操作。
-- 自动排除 NAS 缩略图、回收站及 Syncthing 系统目录。
-- 提供独立的[目录拆分工具](docs/directory-splitting.md)，按 8 GB 生成平级上传批次，支持预览、进度和中断恢复。
+手机照片、视频和导出的备份文件，常常堆在 NAS 的上传目录里。NAS Archiver 帮你把它们整理成按年月排列的资料库：选择目录、查看预览、确认归档，还能把大目录拆成便于上传网盘的批次。
 
-## 支持的格式
+**原生 Mac 应用 · QNAP NAS / Linux · 文件在服务端处理 · 开源免费**
 
-| 类型 | 格式 | 归档位置 |
-| --- | --- | --- |
-| 照片及图片 | `jpg`、`jpeg`、`heic`、`webp`、`gif` | `photos/年/月` |
-| PNG 图片 | `png` | `pngs/年/月` |
-| 视频 | `mp4`、`mov`、`3gp` | `videos/年/月` |
+![归档结果总览：已归档数量、跳过数量、文件状态和历史任务](docs/images/archive-overview.png)
 
-GIF 按原始字节归档，不转码、不拆分动画。无法识别的格式会保留在来源目录。
+## 先看预览，再开始归档
 
-## 服务端与 Mac 客户端
+在 Mac 上浏览 NAS 目录，可一次选择多个来源。先扫描，查看文件数量、总大小、日期范围和需要关注的项目，再决定开始。
 
-客户端需要 macOS 26+。操作流程：
+扫描只生成预览。确认开始后，服务端先复制并校验内容，成功后移除来源文件，完成归档。开始前还可以重新扫描，把后来新增的文件纳入这次预览。
 
-1. 连接归档服务，填写服务地址和服务端提供的 Token。
-2. 选择服务端目录，扫描并查看预览。
-3. 确认后开始归档，查看进度或暂停任务。
-4. 完成后检查需要关注的项目及来源残留内容，按需清理空目录。
+归档会排除常见的 NAS 缩略图、回收站和 Syncthing 系统目录。
 
-Mac 客户端默认启用“跳过重复文件”：先按拍摄时间、大小和扩展名查找候选，再逐字节确认内容；相同文件保留来源。它不需要对整个归档库计算哈希，但也不是跨任意文件名的全库去重。
+![新建归档：选择服务端来源目录、归档位置与重复文件处理选项](docs/images/new-archive.png)
 
-### 启动服务
+## 让照片和视频按时间归位
 
-```bash
-make build
-./dist/archive serve \
-  --listen 127.0.0.1:8787 \
-  --state-dir /path/to/persistent-state \
-  --archive-base /path/to/archive \
-  --roots /path/to/input,/path/to/archive \
-  --token-file /path/to/persistent-state/token \
-  --name "我的归档服务"
-```
-
-服务会在 Token 文件不存在时生成随机凭证。Mac 客户端连接的是这个归档服务，不是 QTS 管理界面或 SSH。
-
-默认只监听本机；局域网访问时应显式配置监听地址和允许访问的目录。API 需要 Token。客户端把 Token 保存在仅当前用户可访问的本地文件中，不使用钥匙串保存连接密码。在不可信网络中，应通过 HTTPS 反向代理保护连接。
-
-### 构建 Mac 客户端
-
-在安装 Xcode 26+ 的 Mac 上运行：
-
-```bash
-make test-macos
-make macos
-open apps/macos/dist/NASArchiver.app
-```
-
-可将生成的 App 复制到 `/Applications` 安装。打包优先使用本机可用的 Apple 签名身份，也可通过 `CODE_SIGN_IDENTITY` 指定。
-
-客户端采用原生 SwiftUI 和 Liquid Glass 控件。任务侧边栏集中显示正在处理的任务与历史记录，连接设置位于左下角。同名任务用独立的 `#1`、`#2` 标记区分。
-
-### 状态与恢复
-
-服务运行时在内存中更新进度，由单一写入者每两秒向 SQLite 提交最多 500 条变更。异常退出可能丢失尚未保存的进度；存在积压时，丢失范围可能超过一个周期。重新启动后，需要检查并恢复任务，或重新扫描；未变化文件的已保存解析结果可以复用。
-
-文件安全不依赖进度是否刚刚保存：目标内容仍需经过校验，来源不会仅凭任务状态被删除。CLI 使用独立的 `job.json` 和 `events.jsonl` 保存任务记录。
-
-## 命令行使用
-
-### 构建
-
-```bash
-go build -o archive ./cmd/archive
-make build-linux-arm64
-make build-linux-arm7
-```
-
-### 扫描目录
-
-```bash
-./archive scan \
-  --path /path/to/input \
-  --state-dir /path/to/archive-state
-```
-
-### 预演归档
-
-```bash
-./archive run \
-  --job <job-id> \
-  --archive-base /path/to/archive \
-  --state-dir /path/to/archive-state \
-  --dry-run \
-  --workers 8 \
-  --snapshot-every 100
-```
-
-### 正式归档
-
-```bash
-./archive run \
-  --job <job-id> \
-  --archive-base /path/to/archive \
-  --state-dir /path/to/archive-state \
-  --workers 8 \
-  --snapshot-every 100
-```
-
-命令行还提供 `status`、`watch`、`files`、`retry`、`export` 和 `jobs`，用于查看状态、跟踪进度、处理失败及导出记录。
-
-`--workers 8` 与 `--snapshot-every 100` 是现有 ARM QNAP 测试下的 CLI 参考值，不是服务端参数。实际性能取决于文件类型、存储设备和校验开销。
-
-## QNAP 安装与权限
-
-详细步骤见 [QNAP 安装说明](docs/qnap-install.md)。
-
-- 正式归档前先扫描预览或进行命令行预演。
-- QNAP 共享目录采用 ACL，执行账号需要具有来源和归档目录的相应权限。
-- 手动运行 CLI 时，可能需要使用 `sudo -u admin`。
-- 推荐安装 ExifTool，以及用于读取视频信息的 `ffprobe` 或 `ffmpeg`。
-
-```bash
-sudo -u admin ./archive run \
-  --job <job-id> \
-  --archive-base /path/to/archive \
-  --state-dir /path/to/archive-state
-```
-
-## 代码目录
+根据文件名和媒体信息识别拍摄日期，将照片、PNG 和视频分开，按年、月存放。GIF 保留原始动画，照片和视频保持原始内容。
 
 ```text
-cmd/archive/          Go 命令行与 HTTP 服务，构建为单个 NAS 可执行文件
-  web/                嵌入服务端的状态页面
-apps/macos/           原生 Mac 客户端、测试、图标及打包脚本
-packaging/qnap/       QPKG 生命周期脚本与安装包构建
-scripts/              服务集成检查
-docs/                 使用、API、架构与验证说明
+archive/
+├── photos/
+│   └── 2026/07/       照片、GIF 等图片
+├── pngs/
+│   └── 2026/07/       PNG 图片
+└── videos/
+    └── 2026/07/       视频
 ```
 
-Go 依赖由根目录的 `go.mod` 管理，Mac 客户端使用独立的 Swift Package。未来 Web 客户端可放在 `apps/web/`，共用现有 API，构建后嵌入 Go 服务端；当前版本尚未提供完整 Web 客户端。详见 [仓库结构说明](docs/repository-layout.md)。
+找不到拍摄日期时，会使用文件修改日期并提示。展开文件即可核对来源、归档位置和日期；路径旁的图标可直接复制地址，尚未开始归档的文件也可以手动修改日期。
 
-## 开发与验证
+![文件详情：来源与归档路径、日期来源，以及需要关注的信息](docs/images/file-details.png)
 
-```bash
-make test                  # Go race 测试
-make smoke                 # 使用临时文件执行真实 HTTP 集成测试
-make test-macos             # Swift 客户端测试
-make build-linux-arm64     # Linux ARM64 构建
-make build-linux-arm7      # Linux ARMv7 构建
-make qnap-stage            # 生成 QDK 构建输入，不是可安装的 QPKG
+## 减少重复占用，保留处理依据
+
+默认开启“跳过重复”：先查找拍摄时间、大小和扩展名匹配的候选，再确认内容完全相同。确认重复后，归档中已有的文件保留，来源文件也保留，本次不再复制。
+
+遇到目标同名但内容不同的文件时，会另存，不覆盖原文件。通过文件筛选查看跳过、失败和需要关注的项目，逐个核对处理结果。
+
+| 你遇到的情况 | 可以怎么处理 |
+| --- | --- |
+| 日期缺失或需要核对 | 查看日期来源，开始前设置日期，或确认提示信息 |
+| 归档失败 | 查看错误及来源文件，处理原因后重试 |
+| 来源目录还有内容 | 直接浏览残留文件；重复、失败和不支持的文件会留下 |
+| 上传目录已清空 | 清理空文件夹，其他内容保留 |
+| 同一目录又放入了新文件 | 新建归档任务；同名历史任务用 `#1`、`#2` 区分 |
+
+## NAS 继续工作，Mac 随时查看
+
+归档时一起显示文件数量和数据量进度，可以暂停、继续，或在失败后重试。历史记录保留每次任务的结果，便于回头核对。
+
+关闭 Mac 应用后，服务端任务仍会继续。再次连接即可查看进度；也可以在应用设置中开启完成通知，选择浅色、深色或跟随系统的外观。
+
+## 按 8 GB 拆成上传批次
+
+准备分批上传网盘时，打开 **工具 → 拆分目录**，选择目录、预览批次，再点击开始。
+
+批次名称自动沿用来源目录名，使用下划线和编号，放在原目录旁边：
+
+```text
+upload/
+├── iphone15/              原目录保留
+├── iphone15_batch_01/
+├── iphone15_batch_02/
+└── iphone15_batch_03/
 ```
 
-## 项目文档
+- 每批最多 **8 GB**；不足 8 GB 也会生成一个批次。
+- 文件保持完整，保留内部目录结构；单个文件超过上限时独立成批并提示。
+- 隐藏同步项目留在原处，已有批次不会覆盖，编号自动顺延。
+- 可以查看进度、重新打开最近记录，中断后继续执行。
 
-以下文档包含部分英文技术说明：
+![拆分目录工具：平级批次名称、文件数量、大小与完成状态](docs/images/directory-splitting.png)
 
-- [Mac 客户端](apps/macos/README.md)
-- [使用指南](docs/usage.md)
-- [API 说明](docs/service-api.md)
-- [仓库结构](docs/repository-layout.md)
-- [设计说明](docs/design.md)
-- [性能测试](docs/benchmarks.md)
-- [QNAP 注意事项](docs/qnap-notes.md)
-- [验证记录](docs/validation.md)
+拆分完成后，使用你自己的同步或网盘工具上传这些目录。[查看拆分使用说明 →](docs/directory-splitting.md)
 
-## 许可证
+## 开始使用
 
-[MIT](LICENSE)
+1. **安装归档服务**：在 QNAP 上安装 QPKG，或在 Linux 主机上运行服务。
+2. **连接 Mac 应用**：填写服务地址和服务端生成的连接密码（Token）。
+3. **设置目录**：首次连接未配置的服务时，选择允许归档的来源范围和默认归档位置。以后可在连接设置中修改。
+4. **开始整理**：点击工具栏的 `＋` 新建归档；需要准备上传批次时，打开“工具 → 拆分目录”。
+
+**[安装与连接指南 →](docs/getting-started.md)**
+
+Mac 客户端需要 **macOS 26 或更新版本**。当前 QNAP 安装包面向 **ARM64 机型（如 TS-216）**；服务端也可独立运行于 Linux。当前仓库尚未发布可直接下载的安装包，可按安装指南自行构建。
+
+## 支持的文件
+
+| 类型 | 格式 |
+| --- | --- |
+| 照片和图片 | JPG / JPEG、HEIC、WebP、GIF |
+| PNG 图片 | PNG |
+| 视频 | MP4、MOV、3GP |
+
+无法识别的格式会保留在来源目录，方便另行处理。拆分工具按文件大小分批，可处理上述媒体格式以外的普通文件。
+
+## 常见问题
+
+**这是把文件上传到云端吗？**
+
+归档在你自己的 NAS 或 Linux 服务上完成；拆分工具负责准备批次，上传由你已有的工具完成。
+
+**跳过的重复文件为什么还在来源目录？**
+
+这是默认的保留来源策略。确认与归档中候选文件内容相同后，只跳过这次归档，不删除来源。
+
+**断线或退出应用会影响任务吗？**
+
+退出 Mac 应用不影响服务端运行。服务端异常重启后，可检查任务并继续或重试；尚未开始的归档预览可以重新扫描。
+
+## 更多文档
+
+- [安装与连接](docs/getting-started.md) · [拆分目录](docs/directory-splitting.md)
+- [命令行、构建与部署](docs/development.md) · [QNAP 安装细节](docs/qnap-install.md)
+- [API](docs/service-api.md) · [代码结构](docs/repository-layout.md) · [验证记录](docs/validation.md)
+
+截图来自实际运行的 Mac 应用，目录和任务仅用于展示界面。
+
+[MIT 开源许可证](LICENSE)
