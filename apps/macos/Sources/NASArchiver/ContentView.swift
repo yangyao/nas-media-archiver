@@ -62,7 +62,7 @@ struct ContentView: View {
         .sheet(isPresented: $model.showArchiveSettings, onDismiss: {
             if model.canCreateArchive { model.presentArchiveOnboardingIfNeeded() }
         }) { ArchiveSettingsView().environmentObject(model) }
-        .sheet(isPresented: $model.showDirectorySplit) { SplitDirectoryView().environmentObject(model) }
+        .sheet(isPresented: $model.showDirectorySplit) { SplitDirectoryView(initialJob: model.directorySplitToOpen).environmentObject(model) }
         .sheet(isPresented: $model.showNewArchive) {
             NewArchiveView().environmentObject(model)
         }

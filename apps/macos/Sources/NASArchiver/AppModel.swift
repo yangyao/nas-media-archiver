@@ -19,6 +19,8 @@ final class AppModel: ObservableObject {
     @Published var jobToDelete: ArchiveJob?
     @Published var showNewArchive = false
     @Published var showDirectorySplit = false
+    @Published var recentSplits: [DirectorySplitJob] = []
+    var directorySplitToOpen: DirectorySplitJob?
     @Published var showArchiveSettings = false
     var canCreateArchive: Bool { isConnected && serverInfo?.isConfigured == true }
 
@@ -55,7 +57,7 @@ final class AppModel: ObservableObject {
         defaults.set(connection.id.uuidString, forKey: "selectedNAS")
         selectedJobID = selectedJobForConnection[connection.id]
         deletedJobIDs = []; jobToDelete = nil
-        serverInfo = nil; jobs = []; isConnected = false; isConnecting = true
+        serverInfo = nil; jobs = []; recentSplits = []; isConnected = false; isConnecting = true
         client = nil; isStreaming = false; updatesMessage = nil; errorMessage = nil
         connectionTask = Task {
             do {
@@ -69,6 +71,7 @@ final class AppModel: ObservableObject {
                 client = api; serverInfo = info; jobs = values
                 isConnected = true; isConnecting = false
                 startUpdates(api, connectionID: connection.id)
+                await refreshSplitHistory()
                 presentArchiveOnboardingIfNeeded()
             } catch is CancellationError {} catch {
                 guard !Task.isCancelled, selectedConnectionID == connection.id else { return }
@@ -124,6 +127,7 @@ final class AppModel: ObservableObject {
             let values = try await api.jobs()
             guard selectedConnectionID == connectionID else { return }
             serverInfo = info; replaceJobs(values); isConnected = true
+            await refreshSplitHistory()
             errorMessage = nil
             updatesMessage = isStreaming ? nil : pollingMessage
             presentArchiveOnboardingIfNeeded()
@@ -132,6 +136,19 @@ final class AppModel: ObservableObject {
                 isConnected = false
                 errorMessage = presentableError(error)
             }
+        }
+    }
+
+    func openDirectorySplit(_ job: DirectorySplitJob? = nil) {
+        directorySplitToOpen = job
+        showDirectorySplit = true
+    }
+
+    func refreshSplitHistory() async {
+        guard let client, serverInfo?.capabilities?["directorySplit"] == true else { return }
+        let connectionID = selectedConnectionID
+        if let values = try? await client.splitJobs(), selectedConnectionID == connectionID {
+            recentSplits = values
         }
     }
 
@@ -249,9 +266,17 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func streamDidConnect(connectionID: UUID) {
+    private func streamDidConnect(connectionID: UUID) async {
         guard !Task.isCancelled, selectedConnectionID == connectionID else { return }
         isStreaming = true; isConnected = true; updatesMessage = nil
+        // A server upgrade may add capabilities while this client stays open.
+        // Reconnecting the event stream must refresh the cached server info too.
+        if let api = client, let info = try? await api.info() {
+            guard !Task.isCancelled, selectedConnectionID == connectionID else { return }
+            serverInfo = info
+            await refreshSplitHistory()
+        }
+        guard !Task.isCancelled, selectedConnectionID == connectionID else { return }
         presentArchiveOnboardingIfNeeded()
     }
 

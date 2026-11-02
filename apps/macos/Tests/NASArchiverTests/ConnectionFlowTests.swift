@@ -4,6 +4,27 @@ import XCTest
 
 @MainActor
 final class ConnectionFlowTests: XCTestCase {
+    func testEventConnectionRefreshesCapabilitiesAfterServerUpgrade() async throws {
+        let suite = "upgrade-flow-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ConnectionFlowProtocol.self]
+        let session = URLSession(configuration: config)
+        let model = AppModel(defaults: defaults, session: session)
+        let connection = NASConnection(name: "Test service", address: "http://test-service:8787")
+        defer {
+            try? model.removeConnection(connection)
+            defaults.removePersistentDomain(forName: suite)
+            session.invalidateAndCancel()
+        }
+        try await model.saveConnection(connection, token: "upgrade-capabilities-test-token")
+        for _ in 0..<100 {
+            if model.serverInfo?.capabilities?["jobDeletion"] == true { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(model.serverInfo?.capabilities?["jobDeletion"], true)
+    }
+
     func testSaveWaitsForAuthenticatedConnectionAndInitialTaskLoad() async throws {
         let suite = "connection-flow-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -158,6 +179,7 @@ final class ConnectionFlowTests: XCTestCase {
 }
 
 private final class ConnectionFlowProtocol: URLProtocol, @unchecked Sendable {
+    private static let upgradeState = UpgradeInfoState()
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -172,6 +194,10 @@ private final class ConnectionFlowProtocol: URLProtocol, @unchecked Sendable {
         } else if path.hasSuffix("/info"), credential.contains("unconfigured-") {
             status = 200
             payload = #"{"name":"Test service","version":"0.2.7","configured":false,"archiveBase":"","roots":["/share"],"freeBytes":1000,"tools":{}}"#
+        } else if path.hasSuffix("/info"), credential.contains("upgrade-capabilities-") {
+            status = 200
+            let upgraded = Self.upgradeState.next() > 1
+            payload = "{\"name\":\"Test service\",\"version\":\"0.2.10\",\"archiveBase\":\"/archive\",\"roots\":[\"/input\"],\"freeBytes\":1000,\"tools\":{},\"capabilities\":{\"jobDeletion\":\(upgraded)}}"
         } else if path.hasSuffix("/info") {
             status = 200
             payload = #"{"name":"Test service","version":"0.2.0","archiveBase":"/archive","roots":["/input","/archive"],"freeBytes":1000,"tools":{}}"#
@@ -193,6 +219,17 @@ private final class ConnectionFlowProtocol: URLProtocol, @unchecked Sendable {
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}
+}
+
+private final class UpgradeInfoState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func next() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        count += 1
+        return count
+    }
 }
 
 private let existingOnboardingJob = #"""

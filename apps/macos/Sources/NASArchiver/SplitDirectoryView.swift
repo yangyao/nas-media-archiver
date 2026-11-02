@@ -25,11 +25,11 @@ struct DirectorySplitJob: Codable, Identifiable, Sendable {
 }
 
 struct SplitDirectoryView: View {
+    var initialJob: DirectorySplitJob? = nil
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var source = ""
     @State private var job: DirectorySplitJob?
-    @State private var history: [DirectorySplitJob] = []
     @State private var choosing = false
     @State private var listing: DirectoryListing?
     @State private var path = ""
@@ -37,19 +37,20 @@ struct SplitDirectoryView: View {
     @State private var error: String?
     @State private var notice: String?
 
+    init(initialJob: DirectorySplitJob? = nil) {
+        self.initialJob = initialJob
+        _job = State(initialValue: initialJob)
+        _source = State(initialValue: initialJob?.sourcePath ?? "")
+        _choosing = State(initialValue: initialJob == nil)
+        _busy = State(initialValue: initialJob == nil)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 Label("拆分目录", systemImage: "folder.badge.gearshape").font(.title2.weight(.semibold))
                 Spacer()
                 Text("每批 8 GB").font(.callout).foregroundStyle(.secondary)
-                if !history.isEmpty {
-                    Menu("最近拆分") {
-                        ForEach(history) { item in
-                            Button("\(item.prefix) · \(item.completedFiles)/\(item.totalFiles)") { select(item) }
-                        }
-                    }.disabled(busy || job?.isRunning == true)
-                }
             }
             if choosing { browser } else { details }
             if let error { Text(error).font(.callout).foregroundStyle(.red).textSelection(.enabled) }
@@ -57,13 +58,15 @@ struct SplitDirectoryView: View {
             Spacer(minLength: 0)
             Divider()
             HStack {
-                Button(choosing ? "返回" : "关闭") {
-                    if choosing { choosing = false } else { dismiss() }
-                }.buttonStyle(.glass).keyboardShortcut(.cancelAction).disabled(busy)
+                if choosing || job?.status != "completed" {
+                    Button(choosing && job != nil ? "返回" : (job?.isRunning == true ? "关闭" : "取消")) {
+                        if choosing && job != nil { choosing = false } else { dismiss() }
+                    }.buttonStyle(.glass).keyboardShortcut(.cancelAction).disabled(busy)
+                }
                 Spacer()
                 if choosing {
-                    Button("选择此目录") { chooseCurrent() }
-                        .buttonStyle(.glassProminent).disabled(listing?.selectable == false || listing?.path.isEmpty != false || busy)
+                    Button("预览") { choosing = false; job = nil; Task { await preview() } }
+                        .buttonStyle(.glassProminent).disabled(source.isEmpty || busy)
                 } else if let job, job.isRunning {
                     ProgressView().controlSize(.small)
                     Text("正在拆分").foregroundStyle(.secondary)
@@ -74,8 +77,8 @@ struct SplitDirectoryView: View {
                     Button(job.status == "preview" ? "开始拆分" : "继续拆分") { Task { await start() } }
                         .buttonStyle(.glassProminent).disabled(busy)
                 } else if job?.status == "completed" {
-                    Button("新建拆分") { self.job = nil; source = ""; error = nil; notice = nil }
-                        .buttonStyle(.glassProminent)
+                    Button("完成") { dismiss() }
+                        .buttonStyle(.glassProminent).keyboardShortcut(.defaultAction)
                 } else {
                     Button(busy ? "正在预览…" : "预览") { Task { await preview() } }
                         .buttonStyle(.glassProminent).disabled(source.isEmpty || busy)
@@ -83,7 +86,10 @@ struct SplitDirectoryView: View {
             }
         }.padding(24).frame(width: 760, height: 560)
         .interactiveDismissDisabled(busy)
-        .task { await loadHistory() }
+        .task {
+            if initialJob != nil { await reload() }
+            else { await browse("") }
+        }
         .task(id: job?.isRunning == true ? job?.id : nil) {
             guard let id = job?.id, job?.isRunning == true else { return }
             while !Task.isCancelled {
@@ -93,7 +99,7 @@ struct SplitDirectoryView: View {
                     try Task.checkCancellation()
                     job = value; error = value.error.isEmpty ? nil : value.error
                     notice = nil
-                    if !value.isRunning { await loadHistory(selectActive: false); return }
+                    if !value.isRunning { await model.refreshSplitHistory(); return }
                 } catch is CancellationError { return }
                 catch { notice = "连接暂时中断，正在重试；拆分由服务端继续执行。" }
             }
@@ -107,7 +113,9 @@ struct SplitDirectoryView: View {
                 Text("来源").foregroundStyle(.secondary).frame(width: 56, alignment: .leading)
                 Text(source.isEmpty ? "选择要拆分的目录" : displayRemotePath(source)).lineLimit(1).truncationMode(.middle).help(source)
                 Spacer()
-                Button("选择…") { choosing = true; Task { await browse("") } }.disabled(busy || job?.isRunning == true || (job != nil && job?.status != "preview"))
+                if job == nil || job?.status == "preview" {
+                    Button("更改…") { choosing = true; Task { await browse("") } }.disabled(busy)
+                }
             }
             if let job {
                 if job.status == "preview" {
@@ -147,19 +155,22 @@ struct SplitDirectoryView: View {
                 Button("前往") { Task { await browse(path) } }
             }.disabled(busy)
             List((listing?.entries ?? []).filter { !$0.name.hasPrefix(".") }) { entry in
-                Button { Task { await browse(entry.path) } } label: {
-                    HStack { Label(entry.name, systemImage: "folder"); Spacer(); Image(systemName: "chevron.right").foregroundStyle(.secondary) }.contentShape(Rectangle())
-                }.buttonStyle(.plain).disabled(busy)
-            }
+                HStack {
+                    Toggle(isOn: Binding(
+                        get: { source == entry.path },
+                        set: { source = $0 ? entry.path : "" }
+                    )) { Label(entry.name, systemImage: "folder") }
+                        .toggleStyle(.checkbox).disabled(busy || entry.selectable == false)
+                    Spacer()
+                    Button("打开 \(entry.name)", systemImage: "chevron.right") { Task { await browse(entry.path) } }
+                        .labelStyle(.iconOnly).buttonStyle(.plain).disabled(busy)
+                }.padding(.vertical, 6)
+            }.overlay { if busy { ProgressView() } }
         }
     }
     private func splitBytes(_ value: Int64) -> String { ByteCountFormatter.string(fromByteCount: value, countStyle: .decimal) }
-    private func chooseCurrent() {
-        guard let p = listing?.path, !p.isEmpty else { return }
-        source = p; job = nil; error = nil; choosing = false
-    }
     private func browse(_ value: String) async {
-        busy = true; error = nil; listing = nil
+        busy = true; error = nil; listing = nil; source = ""
         defer { busy = false }
         do {
             let result = try await model.api().browseSources(value, archiveBase: model.serverInfo?.archiveBase ?? "")
@@ -177,18 +188,12 @@ struct SplitDirectoryView: View {
         guard let id = job?.id else { return }
         busy = true; error = nil
         defer { busy = false }
-        do { job = try await model.api().startSplit(id); await loadHistory(selectActive: false) }
+        do { job = try await model.api().startSplit(id); await model.refreshSplitHistory() }
         catch { self.error = presentableError(error) }
     }
     private func select(_ value: DirectorySplitJob) { job = value; source = value.sourcePath; error = value.error.isEmpty ? nil : value.error }
     private func reload() async {
         guard let id = job?.id else { return }
         do { select(try await model.api().splitJob(id)) } catch { self.error = presentableError(error) }
-    }
-    private func loadHistory(selectActive: Bool = true) async {
-        do {
-            history = try await model.api().splitJobs()
-            if selectActive, job == nil, let active = history.first(where: { $0.status != "completed" }) { select(active) }
-        } catch { self.error = presentableError(error) }
     }
 }

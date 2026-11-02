@@ -19,8 +19,13 @@ struct NASArchiverApp: App {
         .defaultSize(width: 1080, height: 760)
         .commands {
             CommandMenu("工具") {
-                Button("拆分目录…") { model.showDirectorySplit = true }
+                Button("拆分目录…") { model.openDirectorySplit() }
                     .disabled(!model.isConnected || model.serverInfo?.capabilities?["directorySplit"] != true)
+                Menu("最近拆分") {
+                    ForEach(model.recentSplits) { job in
+                        Button(job.prefix) { model.openDirectorySplit(job) }
+                    }
+                }.disabled(!model.isConnected || model.recentSplits.isEmpty)
             }
             CommandGroup(after: .newItem) {
                 Button("新建归档…") { model.showNewArchive = true }
