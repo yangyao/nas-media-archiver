@@ -19,6 +19,7 @@ type serviceStore struct {
 	lock         *os.File
 	mu           sync.Mutex
 	generation   map[string]uint64
+	deleted      map[string]bool
 	seen         map[string]bool
 	lastFlush    time.Time
 	lastError    string
@@ -64,7 +65,7 @@ func openServiceStore(dir string) (*serviceStore, error) {
 		}
 	}
 	success = true
-	s := &serviceStore{db: db, lock: lock, pending: map[string]storeRecord{}, generation: map[string]uint64{}, seen: map[string]bool{}, stop: make(chan struct{}), done: make(chan struct{})}
+	s := &serviceStore{db: db, lock: lock, pending: map[string]storeRecord{}, generation: map[string]uint64{}, deleted: map[string]bool{}, seen: map[string]bool{}, stop: make(chan struct{}), done: make(chan struct{})}
 	go s.writer()
 	return s, nil
 }
@@ -77,6 +78,8 @@ type storeRecord struct {
 	data          []byte
 	reset         bool
 	summary       bool
+	remove        bool
+	result        chan error
 }
 
 // save only snapshots memory. The writer goroutine exclusively owns all SQL
@@ -95,6 +98,9 @@ func (s *serviceStore) save(j *ServiceJob, f *ServiceFile) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.deleted[j.ID] {
+		return fmt.Errorf("task has been deleted")
+	}
 	prefix := fmt.Sprintf("%s/%d/", j.ID, s.generation[j.ID])
 	if !s.seen[j.ID] {
 		s.seen[j.ID] = true
@@ -106,6 +112,28 @@ func (s *serviceStore) save(j *ServiceJob, f *ServiceFile) error {
 	}
 	return nil
 }
+
+// Queue deletion through the same tick-driven writer. Pending updates are
+// discarded and failed in-flight batches cannot resurrect the deleted task.
+func (s *serviceStore) deleteJob(id string) <-chan error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	done := make(chan error, 1)
+	s.deleted[id] = true
+	remaining := make([]string, 0, len(s.order))
+	for _, key := range s.order {
+		if s.pending[key].jobID == id {
+			delete(s.pending, key)
+		} else {
+			remaining = append(remaining, key)
+		}
+	}
+	key := "delete/" + id
+	s.pending[key] = storeRecord{jobID: id, remove: true, result: done}
+	s.order = append([]string{key}, remaining...)
+	return done
+}
+
 func (s *serviceStore) enqueue(key string, r storeRecord) {
 	if _, ok := s.pending[key]; !ok {
 		s.order = append(s.order, key)
@@ -135,6 +163,14 @@ func (s *serviceStore) writer() {
 				n, err := s.flushBatch()
 				if err != nil {
 					s.closeErr = err
+					s.mu.Lock()
+					for _, r := range s.pending {
+						if r.result != nil {
+							r.result <- err
+							close(r.result)
+						}
+					}
+					s.mu.Unlock()
 					return
 				}
 				if n == 0 {
@@ -201,6 +237,9 @@ func (s *serviceStore) flushBatch() (int, error) {
 		restored := make([]string, 0, len(keys)+len(s.order))
 		selected := map[string]bool{}
 		for i, key := range keys {
+			if s.deleted[records[i].jobID] && !records[i].remove {
+				continue
+			}
 			if _, ok := s.pending[key]; !ok {
 				s.pending[key] = records[i]
 			}
@@ -215,6 +254,14 @@ func (s *serviceStore) flushBatch() (int, error) {
 		s.order = restored
 	}
 	s.mu.Unlock()
+	if err == nil {
+		for _, r := range records {
+			if r.result != nil {
+				r.result <- nil
+				close(r.result)
+			}
+		}
+	}
 	return n, err
 }
 func (s *serviceStore) writeBatch(records []storeRecord) error {
@@ -224,7 +271,12 @@ func (s *serviceStore) writeBatch(records []storeRecord) error {
 	}
 	defer tx.Rollback()
 	for _, r := range records {
-		if r.reset {
+		if r.remove {
+			_, err = tx.Exec(`DELETE FROM service_files WHERE job_id=?`, r.jobID)
+			if err == nil {
+				_, err = tx.Exec(`DELETE FROM service_jobs WHERE id=?`, r.jobID)
+			}
+		} else if r.reset {
 			_, err = tx.Exec(`DELETE FROM service_files WHERE job_id=?`, r.jobID)
 		} else if r.fileID != "" {
 			_, err = tx.Exec(`INSERT INTO service_files(job_id,id,data) VALUES(?,?,?) ON CONFLICT(job_id,id) DO UPDATE SET data=excluded.data`, r.jobID, r.fileID, r.data)

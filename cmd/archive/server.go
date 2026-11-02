@@ -191,6 +191,10 @@ func (s *archiveService) route(w http.ResponseWriter, r *http.Request) {
 	}
 	id := parts[0]
 	if len(parts) == 1 {
+		if r.Method == "DELETE" {
+			s.deleteJobEndpoint(w, r, id)
+			return
+		}
 		if r.Method != "GET" {
 			serviceError(w, 405, "method_not_allowed", "Use GET.")
 			return
@@ -296,7 +300,7 @@ func (s *archiveService) info(w http.ResponseWriter) {
 		path = parent
 	}
 	free := int64(stat.Bavail) * int64(stat.Bsize)
-	writeServiceJSON(w, 200, map[string]interface{}{"name": s.config.Name, "version": serviceVersion, "capabilities": map[string]bool{"directorySplit": true}, "configured": settings.Configured, "archiveBase": settings.ArchiveBase, "roots": s.config.Roots, "freeBytes": free, "tools": tools, "persistence": s.store.status()})
+	writeServiceJSON(w, 200, map[string]interface{}{"name": s.config.Name, "version": serviceVersion, "capabilities": map[string]bool{"directorySplit": true, "jobDeletion": true}, "configured": settings.Configured, "archiveBase": settings.ArchiveBase, "roots": s.config.Roots, "freeBytes": free, "tools": tools, "persistence": s.store.status()})
 }
 
 // Source browsing is a view of the configured access roots, not a broader
@@ -493,12 +497,16 @@ func (s *archiveService) events(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, ": connected\n\n")
 	flusher.Flush()
 	seen := map[string]time.Time{}
+	previous := map[string]ServiceJob{}
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	heart := time.NewTicker(15 * time.Second)
 	defer heart.Stop()
 	send := func() bool {
-		for _, j := range s.listJobs() {
+		jobs := s.listJobs()
+		present := map[string]bool{}
+		for _, j := range jobs {
+			present[j.ID] = true
 			if t, ok := seen[j.ID]; ok && t.Equal(j.UpdatedAt) {
 				continue
 			}
@@ -510,6 +518,23 @@ func (s *archiveService) events(w http.ResponseWriter, r *http.Request) {
 				return false
 			}
 			seen[j.ID] = j.UpdatedAt
+			previous[j.ID] = j
+		}
+		for id := range seen {
+			if present[id] {
+				continue
+			}
+			deleted := previous[id]
+			deleted.Status = "deleted"
+			b, err := json.Marshal(deleted)
+			if err != nil {
+				return false
+			}
+			if _, err = fmt.Fprintf(w, "event: job\ndata: %s\n\n", b); err != nil {
+				return false
+			}
+			delete(seen, id)
+			delete(previous, id)
 		}
 		flusher.Flush()
 		return true

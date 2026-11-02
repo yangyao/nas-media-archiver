@@ -66,6 +66,10 @@ struct APIClient: Sendable {
     func splitJob(_ id: String) async throws -> DirectorySplitJob { try await fetch(DirectorySplitJob.self, path: "tools/splits/\(id)") }
     func splitJobs() async throws -> [DirectorySplitJob] { try await fetch([DirectorySplitJob].self, path: "tools/splits") }
     func info() async throws -> ServerInfo { try await fetch(ServerInfo.self, path: "info") }
+    func deleteJob(_ id: String) async throws {
+        struct Deleted: Decodable, Sendable { var id: String; var status: String }
+        _ = try await fetch(Deleted.self, path: "jobs/\(id)", method: "DELETE")
+    }
     func jobs() async throws -> [ArchiveJob] { try await fetch([ArchiveJob].self, path: "jobs") }
     func browse(_ path: String) async throws -> DirectoryListing { try await fetch(DirectoryListing.self, path: "browse", query: [.init(name: "path", value: path)]) }
     func browseSources(_ path: String, archiveBase: String) async throws -> DirectoryListing {

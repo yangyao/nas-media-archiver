@@ -183,6 +183,7 @@ func (s *archiveService) changed(j *ServiceJob, f *ServiceFile) error {
 }
 func serviceJobSnapshot(j *ServiceJob) ServiceJob {
 	v := *j
+	v.Deletable = canDeleteServiceJob(j)
 	v.Files = nil
 	v.counted = nil
 	v.scanCache = nil

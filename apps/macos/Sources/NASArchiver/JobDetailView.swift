@@ -23,6 +23,13 @@ struct JobDetailView: View {
                     }
                     Spacer(minLength: 12)
                     actionButtons
+                    if job.canDelete && model.serverInfo?.capabilities?["jobDeletion"] == true {
+                        Menu {
+                            Button("删除任务…", systemImage: "trash", role: .destructive) { model.jobToDelete = job }
+                                .disabled(!model.isConnected || model.isPerformingAction)
+                        } label: { Image(systemName: "ellipsis") }
+                            .menuStyle(.borderlessButton).fixedSize().help("任务操作")
+                    }
                 }
                 metadata
                 progress

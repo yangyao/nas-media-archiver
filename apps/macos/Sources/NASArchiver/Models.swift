@@ -52,6 +52,7 @@ struct ArchiveJob: Codable, Identifiable, Equatable, Sendable {
     var unsupportedBytes: Int64?
     var scanComplete: Bool?
     var started: Bool?
+    var deletable: Bool?
     var totalBytes: Int64
     var completedBytes: Int64
     var currentFile: String
@@ -79,6 +80,11 @@ struct ArchiveJob: Codable, Identifiable, Equatable, Sendable {
     var canRescan: Bool { status == "ready" && !(started ?? (processedFiles > 0)) }
     var processedFiles: Int { completedFiles + (skippedFiles ?? 0) }
     var processedBytes: Int64 { completedBytes + (skippedBytes ?? 0) }
+    var canDelete: Bool {
+        if let deletable { return deletable }
+        return ["completed", "completed_with_errors"].contains(status)
+            || (!(started ?? (processedFiles > 0)) && ["ready", "interrupted", "failed"].contains(status))
+    }
     var canPause: Bool { ["running", "queued"].contains(status) }
     var progress: Double {
         guard supportedBytes > 0 else {

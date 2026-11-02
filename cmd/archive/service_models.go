@@ -2,9 +2,10 @@ package main
 
 import "time"
 
-const serviceVersion = "0.2.9"
+const serviceVersion = "0.2.10"
 
 type ServiceJob struct {
+	Deletable               bool           `json:"deletable"`
 	Started                 bool           `json:"started"`
 	SkipDuplicates          bool           `json:"skipDuplicates"`
 	SkippedFiles            int            `json:"skippedFiles"`

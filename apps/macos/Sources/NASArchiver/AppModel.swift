@@ -16,6 +16,7 @@ final class AppModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var updatesMessage: String?
     @Published var connectionEditor: ConnectionEditorTarget?
+    @Published var jobToDelete: ArchiveJob?
     @Published var showNewArchive = false
     @Published var showDirectorySplit = false
     @Published var showArchiveSettings = false
@@ -24,6 +25,7 @@ final class AppModel: ObservableObject {
     private let defaults: UserDefaults
     private let session: URLSession
     private var client: APIClient?
+    private var deletedJobIDs: Set<String> = []
     private var connectionTask: Task<Void, Never>?
     private var updatesTask: Task<Void, Never>?
     private var isStreaming = false
@@ -52,6 +54,7 @@ final class AppModel: ObservableObject {
         selectedConnectionID = connection.id
         defaults.set(connection.id.uuidString, forKey: "selectedNAS")
         selectedJobID = selectedJobForConnection[connection.id]
+        deletedJobIDs = []; jobToDelete = nil
         serverInfo = nil; jobs = []; isConnected = false; isConnecting = true
         client = nil; isStreaming = false; updatesMessage = nil; errorMessage = nil
         connectionTask = Task {
@@ -169,6 +172,26 @@ final class AppModel: ObservableObject {
         } catch { if connectionID == selectedConnectionID { errorMessage = presentableError(error) } }
     }
 
+    func deleteJob(_ job: ArchiveJob) async {
+        guard !isPerformingAction, job.canDelete else { return }
+        isPerformingAction = true
+        let connectionID = selectedConnectionID
+        defer { isPerformingAction = false }
+        do {
+            try await api().deleteJob(job.id)
+            guard connectionID == selectedConnectionID else { return }
+            removeJobRecord(job.id)
+        } catch { if connectionID == selectedConnectionID { errorMessage = presentableError(error) } }
+    }
+
+    private func removeJobRecord(_ id: String) {
+        deletedJobIDs.insert(id)
+        if jobToDelete?.id == id { jobToDelete = nil }
+        jobs.removeAll { $0.id == id }
+        if selectedJobID == id { selectedJobID = jobs.first?.id }
+        selectedJobForConnection = selectedJobForConnection.filter { $0.value != id }
+    }
+
     func setSkipDuplicates(_ enabled: Bool, job: ArchiveJob) async {
         guard !isPerformingAction else { return }
         isPerformingAction = true
@@ -232,12 +255,15 @@ final class AppModel: ObservableObject {
         presentArchiveOnboardingIfNeeded()
     }
 
-    private func replaceJobs(_ values: [ArchiveJob]) {
+    func replaceJobs(_ values: [ArchiveJob]) {
+        let values = values.filter { !deletedJobIDs.contains($0.id) && $0.status != "deleted" }
         for job in values { notifyIfCompleted(job, previous: jobs.first { $0.id == job.id }) }
         jobs = values.sorted { $0.createdAt > $1.createdAt }
     }
 
-    private func upsert(_ job: ArchiveJob) {
+    func upsert(_ job: ArchiveJob) {
+        if job.status == "deleted" { removeJobRecord(job.id); return }
+        guard !deletedJobIDs.contains(job.id) else { return }
         if let index = jobs.firstIndex(where: { $0.id == job.id }) {
             notifyIfCompleted(job, previous: jobs[index]); jobs[index] = job
         } else { jobs.insert(job, at: 0) }

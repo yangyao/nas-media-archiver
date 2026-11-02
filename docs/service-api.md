@@ -196,3 +196,16 @@ Mac 连接只需地址与 Token，首次配置及后续修改均在客户端完�
 同一文件系统使用 no-overwrite 硬链接发布，目录 fsync 后移除来源文件名，保留文件元数据，
 不读取整个文件或计算哈希。重启后显式继续，通过原文件 inode/大小/mtime 恢复。
 跨文件系统不回退到复制，遇到错误会停止并保留文件。
+
+### 删除归档任务（0.2.10）
+
+`DELETE /api/v1/jobs/{id}` 只删除任务与文件条目记录，不访问、移动或删除任何媒体文件。
+成功返回 `200 {"id":"…","status":"deleted"}`，等待现有单写入者在固定 tick 中提交后再确认。
+未开始的 ready/interrupted/failed，以及 completed/completed_with_errors 可删除；
+正在扫描、执行、排队、暂停处理中或已开始但尚未完成的任务返回 409。
+仍有未完成发布/临时文件恢复记录的任务也不能删除，需先重试处理。
+任务不存在返回 404；所有请求仍需 Bearer Token。
+
+任务快照新增 `deletable`，`info.capabilities.jobDeletion` 标识支持此功能。
+已连接的 SSE 客户端收到原任务的 `job` 事件，`status` 为 `deleted`；此事件只表示移除记录。
+客户端应忽略之后可能到达的旧快照，避免已删除任务重新出现。

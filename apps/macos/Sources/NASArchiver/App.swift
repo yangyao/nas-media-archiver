@@ -26,6 +26,8 @@ struct NASArchiverApp: App {
                 Button("新建归档…") { model.showNewArchive = true }
                     .keyboardShortcut("n", modifiers: .command)
                     .disabled(!model.canCreateArchive)
+                Button("删除任务…") { model.jobToDelete = model.selectedJob }
+                    .disabled(model.selectedJob?.canDelete != true || !model.isConnected || model.isPerformingAction || model.serverInfo?.capabilities?["jobDeletion"] != true)
                 Button("刷新") { Task { await model.refresh() } }
                     .keyboardShortcut("r", modifiers: .command)
             }

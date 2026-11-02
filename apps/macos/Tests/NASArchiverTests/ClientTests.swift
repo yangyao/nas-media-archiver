@@ -3,6 +3,42 @@ import XCTest
 @testable import NASArchiver
 
 final class ClientTests: XCTestCase {
+    func testOnlyCompletedOrUnstartedTasksCanBeDeleted() throws {
+        var job = try JSONDecoder().decode(ArchiveJob.self, from: Data(jobFixture.utf8))
+        job.started = false
+        job.completedFiles = 0
+        for status in ["ready", "completed", "completed_with_errors", "failed", "interrupted"] {
+            job.status = status
+            XCTAssertTrue(job.canDelete, status)
+        }
+        for status in ["scanning", "running", "queued", "pausing", "paused"] {
+            job.status = status
+            XCTAssertFalse(job.canDelete, status)
+        }
+        job.status = "interrupted"; job.started = true
+        XCTAssertFalse(job.canDelete)
+        job.status = "completed"; job.deletable = false
+        XCTAssertFalse(job.canDelete, "The server can retain a recovery journal")
+    }
+
+    @MainActor
+    func testDeletedTaskCannotReturnThroughStaleEventsOrSnapshots() throws {
+        let suite = "delete-events-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = AppModel(defaults: defaults)
+        let job = try JSONDecoder().decode(ArchiveJob.self, from: Data(jobFixture.utf8))
+        model.jobs = [job]; model.selectedJobID = job.id; model.jobToDelete = job
+        var deleted = job; deleted.status = "deleted"
+        model.upsert(deleted)
+        XCTAssertTrue(model.jobs.isEmpty)
+        XCTAssertNil(model.selectedJobID)
+        XCTAssertNil(model.jobToDelete)
+        model.upsert(job)
+        model.replaceJobs([job])
+        XCTAssertTrue(model.jobs.isEmpty)
+    }
+
     func testRemoteBrowseEscapesPathsAndUsesBearerAuthentication() throws {
         let client = try APIClient(address: "http://192.168.2.196:8787", token: "private-token")
         let request = try client.request("browse", query: [.init(name: "path", value: "/share/照片/旅行 & 家人")])

@@ -66,6 +66,12 @@ struct ContentView: View {
         .sheet(isPresented: $model.showNewArchive) {
             NewArchiveView().environmentObject(model)
         }
+        .alert("删除任务？", isPresented: Binding(get: { model.jobToDelete != nil }, set: { if !$0 { model.jobToDelete = nil } }), presenting: model.jobToDelete) { job in
+            Button("取消", role: .cancel) { }
+            Button("删除任务", role: .destructive) { Task { await model.deleteJob(job) } }
+        } message: { job in
+            Text("删除“\(job.name)”的任务记录？来源文件和归档文件都会保留。")
+        }
         .onAppear {
             if !model.isConnected && !model.isConnecting {
                 editConnection()
@@ -158,6 +164,10 @@ struct JobRow: View {
         }
         .padding(.vertical, 6)
         .help(job.name)
+        .contextMenu {
+            Button("删除任务…", systemImage: "trash", role: .destructive) { model.jobToDelete = job }
+                .disabled(!job.canDelete || !model.isConnected || model.isPerformingAction || model.serverInfo?.capabilities?["jobDeletion"] != true)
+        }
     }
 }
 
